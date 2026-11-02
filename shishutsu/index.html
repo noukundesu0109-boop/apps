@@ -1,1 +1,29 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=./shishutsu.html"><title>支出細目</title><script>location.replace('./shishutsu.html'+location.search+location.hash)</script></head><body><a href="./shishutsu.html">支出細目を開く</a></body></html>
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>支出細目</title>
+<script>
+(async function () {
+  var target = '../shishutsu-app/shishutsu.html' + location.search + location.hash;
+  try {
+    if (navigator.serviceWorker) {
+      try { await navigator.serviceWorker.register('./sw.js', { scope: './' }); } catch (e) {}
+      var regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.filter(function (reg) {
+        try { return new URL(reg.scope).pathname === '/apps/shishutsu/'; } catch (e) { return false; }
+      }).map(function (reg) { return reg.unregister(); }));
+    }
+    if (window.caches) {
+      var keys = await caches.keys();
+      await Promise.all(keys.filter(function (key) { return key.indexOf('shishutsu-solo-') === 0; }).map(function (key) { return caches.delete(key); }));
+    }
+  } catch (e) {}
+  location.replace(target);
+})();
+</script>
+<!--../shishutsu-app/shishutsu.html">
+</head>
+<body><p><a href="../shishutsu-app/shishutsu.html">支出細目を開く</a></p></body>
+</html>

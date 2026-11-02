@@ -1,9 +1,9 @@
 {
   "name": "買い物",
   "short_name": "買い物",
-  "id": "/apps/kaimono/?app=kaimono-v2",
-  "start_url": "/apps/kaimono/?pwa=2",
-  "scope": "/apps/kaimono/",
+  "id": "/apps/kaimono-app/",
+  "start_url": "/apps/kaimono-app/",
+  "scope": "/apps/kaimono-app/",
   "display": "standalone",
   "lang": "ja",
   "theme_color": "#1f5c45",

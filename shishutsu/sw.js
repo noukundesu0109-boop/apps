@@ -1,21 +1,21 @@
-const CACHE = 'shishutsu-solo-v21';
-const PRECACHE = ['./shishutsu.html', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
-self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting()));
-});
-self.addEventListener('activate', (event) => {
-  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith('shishutsu-solo-') && key !== CACHE).map((key) => caches.delete(key)))).then(() => self.clients.claim()));
-});
-self.addEventListener('fetch', (event) => {
-  const req = event.request;
-  if (req.method !== 'GET') return;
-  const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return;
-  event.respondWith(fetch(req).then((res) => {
-    if (res && res.ok && res.type === 'basic') {
-      const copy = res.clone();
-      caches.open(CACHE).then((cache) => cache.put(req, copy));
-    }
-    return res;
-  }).catch(() => caches.match(req, { ignoreSearch: true }).then((hit) => hit || (req.mode === 'navigate' ? caches.match('./shishutsu.html') : Promise.reject()))));
+const OLD_PREFIX = 'shishutsu-solo-';
+const FROM = '/apps/shishutsu';
+const TO = '/apps/shishutsu-app';
+self.addEventListener('install', function (event) { self.skipWaiting(); });
+self.addEventListener('activate', function (event) {
+  event.waitUntil((async function () {
+    var keys = await caches.keys();
+    await Promise.all(keys.filter(function (key) { return key.indexOf(OLD_PREFIX) === 0; }).map(function (key) { return caches.delete(key); }));
+    var windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    await Promise.all(windows.map(function (client) {
+      try {
+        var url = new URL(client.url);
+        if (url.pathname === FROM || url.pathname.indexOf(FROM + '/') === 0) {
+          url.pathname = TO + url.pathname.slice(FROM.length);
+          return client.navigate(url.href);
+        }
+      } catch (e) {}
+    }));
+    await self.registration.unregister();
+  })());
 });

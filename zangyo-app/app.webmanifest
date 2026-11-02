@@ -1,28 +1,28 @@
 {
-  "name": "楽天の買い物",
-  "short_name": "楽天の買い物",
-  "id": "/apps/rakuten/?app=rakuten-v2",
-  "start_url": "/apps/rakuten/?pwa=2",
-  "scope": "/apps/rakuten/",
+  "name": "就業",
+  "short_name": "就業",
+  "id": "/apps/zangyo-app/",
+  "start_url": "/apps/zangyo-app/",
+  "scope": "/apps/zangyo-app/",
   "display": "standalone",
   "lang": "ja",
-  "theme_color": "#bf0000",
+  "theme_color": "#1f5c45",
   "background_color": "#f3efe6",
   "icons": [
     {
-      "src": "icon-192.png?_ship=p6a8t9h",
+      "src": "icon-192.png?_ship=6kpa93q",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icon-512.png?_ship=p6a8t9h",
+      "src": "icon-512.png?_ship=6kpa93q",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icon-maskable-512.png?_ship=p6a8t9h",
+      "src": "icon-maskable-512.png?_ship=6kpa93q",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

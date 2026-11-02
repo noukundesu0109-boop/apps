@@ -1,0 +1,49 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#e8553e"><title>お店マップ</title>
+<link rel="manifest" href="app.webmanifest?v=3"><link rel="icon" href="icon-192.png?_ship=89g4rvb"><link rel="apple-touch-icon" href="apple-touch-icon.png?_ship=89g4rvb">
+<link rel="stylesheet" href="lib/leaflet.css?_ship=89g4rvb">
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:system-ui,"Noto Sans JP",sans-serif;color:#222}
+body{display:flex;flex-direction:column}
+header{background:#e8553e;color:#fff;padding:8px 10px;padding-top:calc(8px + env(safe-area-inset-top))}
+header h1{font-size:18px;margin:0 0 6px;display:flex;justify-content:space-between;align-items:center}
+header h1 button{background:rgba(255,255,255,.2);color:#fff;border:0;border-radius:8px;padding:6px 10px;font-size:14px}
+#q{width:100%;padding:9px 12px;border-radius:10px;border:0;font-size:16px}
+.bar{display:flex;gap:6px;overflow-x:auto;padding:6px 8px;background:#fff;border-bottom:1px solid #eee;white-space:nowrap;-webkit-overflow-scrolling:touch}
+.chip{border:1px solid #ddd;background:#fff;border-radius:16px;padding:5px 11px;font-size:13px;flex:none}
+.chip.on{background:#222;color:#fff;border-color:#222}
+select{font-size:13px;padding:5px;border-radius:8px;border:1px solid #ddd;background:#fff;flex:none}
+main{flex:1;position:relative;min-height:0}
+#map,#list{position:absolute;inset:0}#list{overflow:auto;background:#fafafa;display:none}
+.tabs{display:flex;border-top:1px solid #ddd;background:#fff;padding-bottom:env(safe-area-inset-bottom)}
+.tabs button{flex:1;padding:11px;border:0;background:none;font-size:15px}.tabs button.on{color:#e8553e;font-weight:bold}
+.item{background:#fff;margin:6px 8px;padding:10px 12px;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.08);display:flex;gap:10px;align-items:center}
+.item .ic{font-size:24px}.item .t{font-weight:600}.item .s{font-size:12px;color:#777}.item .d{margin-left:auto;font-size:12px;color:#e8553e;white-space:nowrap}
+.pin{font-size:15px;width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.pin span{transform:rotate(45deg)}.pin.v{opacity:.55}
+#sheet{position:fixed;left:0;right:0;bottom:0;background:#fff;border-radius:16px 16px 0 0;box-shadow:0 -2px 12px rgba(0,0,0,.2);padding:14px 16px calc(16px + env(safe-area-inset-bottom));max-height:80vh;overflow:auto;z-index:1000;transform:translateY(105%);transition:transform .2s}
+#sheet.open{transform:none}#sheet h2{margin:0 30px 4px 0;font-size:18px}
+.x{position:absolute;right:10px;top:8px;border:0;background:none;font-size:24px}
+.tag{display:inline-block;background:#f1f1f1;border-radius:8px;padding:2px 8px;margin:2px;font-size:12px}
+.btn{display:block;width:100%;text-align:center;padding:11px;border-radius:10px;border:0;background:#e8553e;color:#fff;font-size:15px;margin-top:8px;text-decoration:none}
+.btn.g{background:#eee;color:#222}
+.memo{white-space:pre-wrap;background:#fff8e6;padding:8px;border-radius:8px;font-size:14px}
+textarea,input[type=text],input[type=url],input[type=number],input[type=date]{width:100%;padding:9px;font-size:16px;border:1px solid #ccc;border-radius:8px}
+.stars button{font-size:26px;border:0;background:none;color:#ccc;padding:0 3px}.stars button.on{color:#f5a623}
+label{display:block;font-size:13px;color:#555;margin-top:10px}
+#fab{position:absolute;right:12px;bottom:14px;z-index:900;display:flex;flex-direction:column;gap:8px}
+#fab button{border:0;border-radius:24px;padding:11px 14px;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.3);font-size:14px}
+#pickmsg{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:950;background:#222;color:#fff;padding:8px 14px;border-radius:16px;display:none}
+.empty{padding:30px;text-align:center;color:#888}
+</style></head><body>
+<header><h1>📍 お店マップ <button id="menuBtn">⚙ バックアップ</button></h1><input id="q" type="search" placeholder="店名・メモで検索"></header>
+<div class="bar" id="genres"></div>
+<div class="bar"><select id="listSel"></select><select id="visSel"><option value="">すべて</option><option value="v">✅ 行った</option><option value="n">まだ</option><option value="w">★行きたい度あり</option></select><select id="sortSel"><option value="">並び：近い順</option><option value="new">新しく保存した順</option></select><span id="count" style="font-size:12px;color:#777;align-self:center"></span></div>
+<main><div id="map"></div><div id="list"></div><div id="pickmsg">地図をタップして場所を選択</div>
+<div id="fab"><button id="nearBtn">📡 近くのお店</button><button id="addBtn">＋ 追加</button></div></main>
+<nav class="tabs"><button id="tMap" class="on">🗺 地図</button><button id="tList">📋 リスト</button></nav>
+<div id="sheet"><button class="x" id="sx">×</button><div id="sc"></div></div>
+<input type="file" id="fileIn" accept="application/json,.json" hidden>
+<script src="lib/leaflet.js?_ship=89g4rvb"></script><script src="app.js?_ship=89g4rvb"></script>
+</body></html>
