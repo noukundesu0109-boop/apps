@@ -1,9 +1,9 @@
 {
   "name": "就業",
   "short_name": "就業",
-  "id": "./",
-  "start_url": "./",
-  "scope": "./",
+  "id": "/apps/zangyo/",
+  "start_url": "/apps/zangyo/",
+  "scope": "/apps/zangyo/",
   "display": "standalone",
   "lang": "ja",
   "theme_color": "#1f5c45",

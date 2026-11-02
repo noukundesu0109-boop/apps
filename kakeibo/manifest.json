@@ -1,9 +1,9 @@
 {
   "name": "家計簿",
   "short_name": "家計簿",
-  "id": "./kakeibo.html",
-  "start_url": "./kakeibo.html",
-  "scope": "./",
+  "id": "/apps/kakeibo/kakeibo.html",
+  "start_url": "/apps/kakeibo/kakeibo.html",
+  "scope": "/apps/kakeibo/",
   "display": "standalone",
   "lang": "ja",
   "theme_color": "#1f5c45",

@@ -1,9 +1,9 @@
 {
   "name": "タイマー",
   "short_name": "タイマー",
-  "id": "./",
-  "start_url": "./",
-  "scope": "./",
+  "id": "/apps/timer/",
+  "start_url": "/apps/timer/",
+  "scope": "/apps/timer/",
   "display": "standalone",
   "orientation": "portrait",
   "lang": "ja",

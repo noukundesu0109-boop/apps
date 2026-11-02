@@ -1,8 +1,9 @@
 {
   "name": "お店マップ",
   "short_name": "お店マップ",
-  "start_url": "./",
-  "scope": "./",
+  "id": "/apps/omise-map/",
+  "start_url": "/apps/omise-map/",
+  "scope": "/apps/omise-map/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#e8553e",

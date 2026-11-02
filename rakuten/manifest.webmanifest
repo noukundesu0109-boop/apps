@@ -1,9 +1,9 @@
 {
   "name": "楽天の買い物",
   "short_name": "楽天の買い物",
-  "id": "./",
-  "start_url": "./",
-  "scope": "./",
+  "id": "/apps/rakuten/",
+  "start_url": "/apps/rakuten/",
+  "scope": "/apps/rakuten/",
   "display": "standalone",
   "lang": "ja",
   "theme_color": "#bf0000",
