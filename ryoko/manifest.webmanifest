@@ -1,8 +1,8 @@
 {
   "name": "りょこう計画",
   "short_name": "りょこう計画",
-  "id": "/apps/ryoko/",
-  "start_url": "/apps/ryoko/",
+  "id": "/apps/ryoko/?app=ryoko-v2",
+  "start_url": "/apps/ryoko/?pwa=2",
   "scope": "/apps/ryoko/",
   "display": "standalone",
   "orientation": "portrait",

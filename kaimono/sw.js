@@ -1,4 +1,4 @@
-const CACHE = 'kaimono-shell-202611021500';
+const CACHE = 'kaimono-shell-202611021700';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 const OCR = ['./ocr/worker-quiet.js', './ocr/worker.min.js', './ocr/tesseract-core-lstm.wasm.js', './ocr/tesseract-core-simd-lstm.wasm.js', './ocr/tesseract-core-relaxedsimd-lstm.wasm.js', './ocr/jpn.traineddata.gz', './ocr/eng.traineddata.gz'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then(async (c) => { await c.addAll(SHELL); await Promise.allSettled(OCR.map((u) => c.add(u))) }).then(() => self.skipWaiting())) });

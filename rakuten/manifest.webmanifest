@@ -1,8 +1,8 @@
 {
   "name": "楽天の買い物",
   "short_name": "楽天の買い物",
-  "id": "/apps/rakuten/",
-  "start_url": "/apps/rakuten/",
+  "id": "/apps/rakuten/?app=rakuten-v2",
+  "start_url": "/apps/rakuten/?pwa=2",
   "scope": "/apps/rakuten/",
   "display": "standalone",
   "lang": "ja",

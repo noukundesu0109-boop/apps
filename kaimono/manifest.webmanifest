@@ -1,8 +1,8 @@
 {
   "name": "買い物",
   "short_name": "買い物",
-  "id": "/apps/kaimono/",
-  "start_url": "/apps/kaimono/",
+  "id": "/apps/kaimono/?app=kaimono-v2",
+  "start_url": "/apps/kaimono/?pwa=2",
   "scope": "/apps/kaimono/",
   "display": "standalone",
   "lang": "ja",

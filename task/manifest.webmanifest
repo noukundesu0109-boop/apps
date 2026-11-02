@@ -1,8 +1,8 @@
 {
   "name": "タスク",
   "short_name": "タスク",
-  "id": "/apps/task/",
-  "start_url": "/apps/task/",
+  "id": "/apps/task/?app=task-v2",
+  "start_url": "/apps/task/?pwa=2",
   "scope": "/apps/task/",
   "display": "standalone",
   "lang": "ja",

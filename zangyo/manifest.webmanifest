@@ -1,8 +1,8 @@
 {
   "name": "就業",
   "short_name": "就業",
-  "id": "/apps/zangyo/",
-  "start_url": "/apps/zangyo/",
+  "id": "/apps/zangyo/?app=zangyo-v2",
+  "start_url": "/apps/zangyo/?pwa=2",
   "scope": "/apps/zangyo/",
   "display": "standalone",
   "lang": "ja",

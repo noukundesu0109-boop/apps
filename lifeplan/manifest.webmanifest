@@ -31,7 +31,7 @@
       "purpose": "any"
     }
   ],
-  "id": "/apps/lifeplan/index.html",
-  "start_url": "/apps/lifeplan/index.html",
+  "id": "/apps/lifeplan/?app=lifeplan-v2",
+  "start_url": "/apps/lifeplan/?pwa=2",
   "scope": "/apps/lifeplan/"
 }

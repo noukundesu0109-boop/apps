@@ -1,8 +1,8 @@
 {
   "name": "支出細目",
   "short_name": "支出細目",
-  "id": "/apps/shishutsu/shishutsu.html",
-  "start_url": "/apps/shishutsu/shishutsu.html",
+  "id": "/apps/shishutsu/?app=shishutsu-v2",
+  "start_url": "/apps/shishutsu/shishutsu.html?pwa=2",
   "scope": "/apps/shishutsu/",
   "display": "standalone",
   "lang": "ja",
