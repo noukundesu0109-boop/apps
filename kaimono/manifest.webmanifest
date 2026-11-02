@@ -1,0 +1,31 @@
+{
+  "name": "買い物",
+  "short_name": "買い物",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "lang": "ja",
+  "theme_color": "#1f5c45",
+  "background_color": "#f3efe6",
+  "icons": [
+    {
+      "src": "icon-192.png?_ship=5dmsea4",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png?_ship=5dmsea4",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-512.png?_ship=5dmsea4",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

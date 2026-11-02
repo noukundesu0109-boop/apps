@@ -1,0 +1,31 @@
+{
+  "name": "就業",
+  "short_name": "就業",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "lang": "ja",
+  "theme_color": "#1f5c45",
+  "background_color": "#f3efe6",
+  "icons": [
+    {
+      "src": "icon-192.png?_ship=6kpa93q",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png?_ship=6kpa93q",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-512.png?_ship=6kpa93q",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

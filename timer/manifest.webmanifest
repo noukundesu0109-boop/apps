@@ -1,0 +1,32 @@
+{
+  "name": "タイマー",
+  "short_name": "タイマー",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "ja",
+  "theme_color": "#142030",
+  "background_color": "#0f1824",
+  "icons": [
+    {
+      "src": "icon-192.png?_ship=b44wwww",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png?_ship=b44wwww",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-512.png?_ship=b44wwww",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

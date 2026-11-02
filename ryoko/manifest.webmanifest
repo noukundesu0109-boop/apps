@@ -1,0 +1,32 @@
+{
+  "name": "りょこう計画",
+  "short_name": "りょこう計画",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "ja",
+  "theme_color": "#1f8a8a",
+  "background_color": "#f4f7f6",
+  "icons": [
+    {
+      "src": "icon-192.png?_ship=2r2g4u4",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png?_ship=2r2g4u4",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-512.png?_ship=2r2g4u4",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

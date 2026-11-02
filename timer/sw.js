@@ -1,0 +1,20 @@
+const CACHE = 'timer-shell-202611021500';
+const SHELL = ['./', './index.html', './timer.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
+self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())) });
+self.addEventListener('activate', (e) => { e.waitUntil((async () => {
+  const keys = await caches.keys(); await Promise.all(keys.filter((k) => k.startsWith('timer-shell-') && k !== CACHE).map((k) => caches.delete(k))); await self.clients.claim()
+})()) });
+self.addEventListener('fetch', (e) => {
+  const req = e.request; if (req.method !== 'GET') return
+  const url = new URL(req.url); if (url.origin !== location.origin) return
+  e.respondWith((async () => {
+    const cache = await caches.open(CACHE)
+    const hit = await cache.match(req, { ignoreSearch: true }) || (req.mode === 'navigate' ? await cache.match('./index.html') : undefined)
+    if (hit) return hit
+    try { const res = await fetch(req); if (res.ok) cache.put(req, res.clone()); return res }
+    catch (err) { if (req.mode === 'navigate') { const f = await cache.match('./index.html'); if (f) return f } throw err }
+  })())
+});
+self.addEventListener('notificationclick', (e) => { e.notification.close(); e.waitUntil((async () => {
+  const cs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true }); if (cs.length) return cs[0].focus(); return self.clients.openWindow('./')
+})()) });
