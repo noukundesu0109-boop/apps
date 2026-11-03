@@ -37,6 +37,7 @@
 
   var current = "shift";
   var alarmDraft = null;
+  var weekdayDraft = [];
   var schedule = null;
   var perm = null;
 
@@ -79,6 +80,9 @@
     ".za-on{display:flex;align-items:center;gap:4px;font-size:13px;color:#6f675c;min-width:52px}",
     ".za-on input{width:18px;height:18px}",
     ".za-overdot{position:absolute;right:3px;top:3px;width:7px;height:7px;border-radius:50%;background:#1f5c45}",
+    ".za-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}",
+    ".za-chip{min-width:40px;min-height:36px;border-radius:999px;border:1px solid #e4ddd0;background:#fff;color:#1c1917;font-size:14px}",
+    ".za-chip.on{background:#1f5c45;color:#fffdf8;border-color:#1f5c45;font-weight:700}",
     "#za-day-alarm{margin-top:14px}",
     "#za-day-alarm h3{margin:0 0 8px;font-size:14px}"
   ].join("");
@@ -227,6 +231,29 @@
   function loadAlarms() {
     var data = typeof window.__zangyoGet === "function" ? window.__zangyoGet() : null;
     alarmDraft = normalizeAlarms(data && data.alarms);
+    weekdayDraft = Array.isArray(data && data.earlyWeekdays)
+      ? data.earlyWeekdays.map(Number).filter(function (n) { return n >= 1 && n <= 7; })
+      : [];
+  }
+
+  function commitWeekdays(days) {
+    weekdayDraft = days.slice().sort(function (a, b) { return a - b; });
+    if (typeof window.__zangyoSet === "function") {
+      var copy = weekdayDraft.slice();
+      window.__zangyoSet(function (state) { return Object.assign({}, state, { earlyWeekdays: copy }); });
+    }
+    fillForm();
+  }
+
+  function weekdayHtml() {
+    var names = ["月", "火", "水", "木", "金", "土", "日"];
+    var chips = names.map(function (name, index) {
+      var n = index + 1;
+      var on = weekdayDraft.indexOf(n) >= 0;
+      return '<button type="button" class="za-chip' + (on ? " on" : "") + '" data-act="weekday" data-dow="' + n + '" aria-pressed="' + (on ? "true" : "false") + '">' + name + "</button>";
+    }).join("");
+    return '<p class="za-muted">早出にする曜日</p><div class="za-chips">' + chips + "</div>" +
+      '<p class="za-muted">選んだ曜日の昼勤は、自動で早出の時刻になります。その日だけやめるときは、勤務の日を開いて早出をオフにしてください。</p>';
   }
 
   function commitAlarms(alarms) {
@@ -251,7 +278,7 @@
           '<button type="button" class="za-del" data-act="del" data-kind="' + key + '" data-i="' + index + '">削除</button>' +
           "</div>";
       }).join("");
-      return '<section class="za-card"><h2>' + esc(kind[1]) + "</h2>" + rows +
+      return '<section class="za-card"><h2>' + esc(kind[1]) + "</h2>" + (key === "early" ? weekdayHtml() : "") + rows +
         '<div class="za-actions">' +
         '<button type="button" class="za-btn" data-act="add" data-kind="' + key + '">行を追加</button>' +
         '<button type="button" class="za-btn" data-act="reset" data-kind="' + key + '">初期の時刻に戻す</button>' +
@@ -296,6 +323,14 @@
       if (window.ZangyoNative && ZangyoNative.setAlarmSkipped) {
         ZangyoNative.setAlarmSkipped(target.dataset.id, act === "skip-alarm");
       }
+      return;
+    }
+    if (act === "weekday") {
+      var dow = Number(target.dataset.dow);
+      var next = weekdayDraft.indexOf(dow) >= 0
+        ? weekdayDraft.filter(function (n) { return n !== dow; })
+        : weekdayDraft.concat(dow);
+      commitWeekdays(next);
       return;
     }
     if (act === "add" || act === "del" || act === "reset") {

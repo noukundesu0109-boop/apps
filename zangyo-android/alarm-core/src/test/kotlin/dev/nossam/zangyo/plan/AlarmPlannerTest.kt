@@ -348,6 +348,49 @@ class AlarmPlannerTest {
     }
 
     @Test
+    fun checkedWeekdayUsesEarlyTimesOnDayShiftsOnly() {
+        val data = work(shifts = mapOf("2026-11-02" to "day", "2026-11-03" to "day", "2026-11-02" to "day")).copy(
+            shifts = mapOf(
+                "2026-11-02" to "day",
+                "2026-11-03" to "day",
+                "2026-11-09" to "night",
+            ),
+            earlyWeekdays = setOf(1),
+        )
+        assertEquals("early", AlarmPlanner.alarmKind(data, "2026-11-02"))
+        assertEquals("day", AlarmPlanner.alarmKind(data, "2026-11-03"))
+        assertEquals("night", AlarmPlanner.alarmKind(data, "2026-11-09"))
+        val plan = AlarmPlanner.plan(data, noon("2026-11-01"), horizonDays = 4)
+        assertEquals("02:00", plan.first { it.date == "2026-11-02" }.time)
+        assertEquals("02:15", plan.first { it.date == "2026-11-03" }.time)
+    }
+
+    @Test
+    fun perDayEarlySwitchOverridesTheWeekdayRule() {
+        val base = work(
+            shifts = mapOf("2026-11-02" to "day", "2026-11-04" to "day"),
+        ).copy(earlyWeekdays = setOf(1))
+        val holidayMonday = base.copy(earlySkip = setOf("2026-11-02"))
+        assertEquals("day", AlarmPlanner.alarmKind(holidayMonday, "2026-11-02"))
+        val extraWednesday = base.copy(early = setOf("2026-11-04"))
+        assertEquals("early", AlarmPlanner.alarmKind(extraWednesday, "2026-11-04"))
+        val muted = base.copy(dayAlarms = mapOf("2026-11-02" to DayOverride(mute = true)))
+        assertNull(AlarmPlanner.alarmKind(muted, "2026-11-02"))
+    }
+
+    @Test
+    fun olderBackupWithoutWeekdaysKeepsManualEarlyOnly() {
+        val data = parseWorkData(
+            """
+            {"shifts":{"2026-11-02":"day","2026-11-04":"day"},"early":["2026-11-04"]}
+            """.trimIndent(),
+        )
+        assertTrue(data.earlyWeekdays.isEmpty())
+        assertEquals("day", AlarmPlanner.alarmKind(data, "2026-11-02"))
+        assertEquals("early", AlarmPlanner.alarmKind(data, "2026-11-04"))
+    }
+
+    @Test
     fun olderBackupWithoutNewSettingsKeepsTheDefaultTimes() {
         val data = parseWorkData(
             """

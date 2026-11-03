@@ -62,10 +62,23 @@ object AlarmPlanner {
         if (iso in data.leave) return "leave"
         return when (data.shifts[iso]) {
             "night" -> "night"
-            "day" -> if (iso in data.early) "early" else "day"
+            "day" -> if (isEarly(data, iso)) "early" else "day"
             "off" -> "off"
             else -> null
         }
+    }
+
+    /** 1 is Monday … 7 is Sunday, matching the 「月〜日」 picker. */
+    fun isEarly(data: WorkData, iso: String): Boolean {
+        if (data.shifts[iso] != "day") return false
+        if (iso in data.earlySkip) return false
+        if (iso in data.early) return true
+        val date = try {
+            LocalDate.parse(iso)
+        } catch (_: DateTimeParseException) {
+            return false
+        }
+        return date.dayOfWeek.value in data.earlyWeekdays
     }
 
     fun snoozeTrigger(nowMillis: Long, minutes: Int = SNOOZE_MINUTES): Long =
@@ -152,6 +165,8 @@ data class WorkData(
     val leave: Set<String>,
     val alarms: Map<String, List<AlarmRow>>,
     val dayAlarms: Map<String, DayOverride> = emptyMap(),
+    val earlyWeekdays: Set<Int> = emptySet(),
+    val earlySkip: Set<String> = emptySet(),
 )
 
 data class PlannedAlarm(
@@ -187,6 +202,8 @@ fun parseWorkData(json: String): WorkData {
         leave = readDates(root.opt("leave")),
         alarms = readAlarms(root.opt("alarms")),
         dayAlarms = readDayAlarms(root.optJSONObject("dayAlarms")),
+        earlyWeekdays = readWeekdays(root.opt("earlyWeekdays")),
+        earlySkip = readDates(root.opt("earlySkip")),
     )
 }
 
@@ -230,6 +247,15 @@ private fun readDayAlarms(raw: JSONObject?): Map<String, DayOverride> {
         if (times.isNotEmpty()) out[key] = DayOverride(mute = false, times = times)
     }
     return out
+}
+
+private fun readWeekdays(raw: Any?): Set<Int> {
+    if (raw !is JSONArray) return emptySet()
+    return (0 until raw.length()).mapNotNull { index ->
+        val value = raw.opt(index)
+        val number = (value as? Number)?.toInt() ?: return@mapNotNull null
+        number.takeIf { it in 1..7 }
+    }.toSet()
 }
 
 private fun readDates(raw: Any?): Set<String> {

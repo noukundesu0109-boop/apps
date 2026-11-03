@@ -13,8 +13,8 @@ android {
         applicationId = "dev.nossam.zangyo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.0.6"
+        versionCode = 8
+        versionName = "1.0.7"
     }
 
     buildTypes {
@@ -71,6 +71,7 @@ val prepareWeb = tasks.register("prepareZangyoWeb") {
         check(index.contains("ZangyoNative.onState")) { "state hook was not injected" }
         check(index.contains("za-day-alarm")) { "per-day alarm host was not injected" }
         check(index.contains("dayAlarms:da")) { "day alarm backup field was not kept" }
+        check(index.contains("earlyWeekdays:ew")) { "early weekday setting was not kept" }
         check(index.contains("enabled:e.enabled===!1")) { "alarm on/off was not kept" }
         check(index.contains("__zangyoDriveDone")) { "drive save was not switched to Android sign-in" }
         check(index.contains("新しい1件だけを残し")) { "drive keep-one text was not updated" }
@@ -134,12 +135,17 @@ fun patchIndex(html: String): String {
     text = replaceOne(
         text,
         """mt=e=>{let t=pt(e);return{...t,early:ft(t.early).filter(e=>t.shifts[e]===`day`),alarms:dt(t.alarms)}}""",
-        """mt=e=>{let t=pt(e),da={};if(t.dayAlarms&&typeof t.dayAlarms==`object`&&!Array.isArray(t.dayAlarms))for(let k of Object.keys(t.dayAlarms)){if(!ct.test(k))continue;let v=t.dayAlarms[k];if(!v||typeof v!=`object`)continue;if(v.mute){da[k]={mute:!0,times:[]};continue}let times=Array.isArray(v.times)?v.times.filter(e=>e&&typeof e==`object`).map(e=>({label:String(e.label??``),time:/^\d{2}:\d{2}$/.test(e.time)?e.time:``,enabled:e.enabled===!1?!1:!0})):[] ;if(times.length)da[k]={mute:!1,times}}return{...t,early:ft(t.early).filter(e=>t.shifts[e]===`day`),alarms:dt(t.alarms),dayAlarms:da}}""",
+        """mt=e=>{let t=pt(e),da={};if(t.dayAlarms&&typeof t.dayAlarms==`object`&&!Array.isArray(t.dayAlarms))for(let k of Object.keys(t.dayAlarms)){if(!ct.test(k))continue;let v=t.dayAlarms[k];if(!v||typeof v!=`object`)continue;if(v.mute){da[k]={mute:!0,times:[]};continue}let times=Array.isArray(v.times)?v.times.filter(e=>e&&typeof e==`object`).map(e=>({label:String(e.label??``),time:/^\d{2}:\d{2}$/.test(e.time)?e.time:``,enabled:e.enabled===!1?!1:!0})):[] ;if(times.length)da[k]={mute:!1,times}}let ew=Array.isArray(t.earlyWeekdays)?[...new Set(t.earlyWeekdays.map(Number).filter(n=>n>=1&&n<=7))].sort((a,b)=>a-b):[],es=ft(t.earlySkip||[]);return{...t,early:ft(t.early).filter(e=>t.shifts[e]===`day`),alarms:dt(t.alarms),dayAlarms:da,earlyWeekdays:ew,earlySkip:es}}""",
     )
     text = replaceOne(
         text,
         """(0,A.jsx)(`p`,{className:`mt-4 mb-1 text-sm font-semibold`,children:`時間の記録`}),""",
         """(0,A.jsx)(`div`,{id:`za-day-alarm`,"data-day":x}),(0,A.jsx)(`p`,{className:`mt-4 mb-1 text-sm font-semibold`,children:`時間の記録`}),""",
+    )
+    text = replaceOne(
+        text,
+        """v=(0,l.useMemo)(()=>new Set(n.early),[n.early]),y=e=>r(t=>({...t,early:t.early.includes(e)?t.early.filter(t=>t!==e):[...t.early,e].sort()}))""",
+        """v=(0,l.useMemo)(()=>{let s=new Set(n.early||[]),k=new Set(n.earlySkip||[]),w=new Set(n.earlyWeekdays||[]);return{has(e){if(k.has(e))return!1;if(s.has(e))return!0;if(!w.size||(n.shifts||{})[e]!==`day`)return!1;let[t,r,i]=e.split(`-`).map(Number),a=new Date(Date.UTC(t,r-1,i)).getUTCDay();return w.has(a===0?7:a)}}},[n.early,n.earlySkip,n.earlyWeekdays,n.shifts]),y=e=>r(t=>{let w=new Set(t.earlyWeekdays||[]),[yy,mm,dd]=e.split(`-`).map(Number),a=new Date(Date.UTC(yy,mm-1,dd)).getUTCDay(),wd=a===0?7:a,auto=t.shifts[e]===`day`&&w.has(wd),on=!(t.earlySkip||[]).includes(e)&&((t.early||[]).includes(e)||auto);return on?{...t,early:(t.early||[]).filter(n=>n!==e),earlySkip:auto?[...new Set([...(t.earlySkip||[]),e])].sort():(t.earlySkip||[]).filter(n=>n!==e)}:{...t,early:[...new Set([...(t.early||[]),e])].sort(),earlySkip:(t.earlySkip||[]).filter(n=>n!==e)}})""",
     )
     text = moveLeaveSettings(text)
     return text
