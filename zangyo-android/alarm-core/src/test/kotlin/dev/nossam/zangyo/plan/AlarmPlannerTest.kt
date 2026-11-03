@@ -229,6 +229,53 @@ class AlarmPlannerTest {
     }
 
     @Test
+    fun skipKeepsThatAlarmOutAndRestorePutsItBack() {
+        val data = work(shifts = mapOf("2026-11-03" to "day", "2026-11-04" to "night"))
+        val planned = AlarmPlanner.plan(data, noon("2026-11-02"), horizonDays = 4)
+        val target = planned.first { it.date == "2026-11-03" && it.time == "02:15" }
+        val other = planned.first { it.date == "2026-11-04" }
+        val skipped = AlarmPlanner.reconcileSkips(data, planned, AlarmPlanner.skipAlarm(emptySet(), target.id))
+        assertEquals(setOf(target.id), skipped)
+        val firing = AlarmPlanner.alarmsToSchedule(planned, skipped).map { it.id }
+        assertTrue(target.id !in firing)
+        assertTrue(other.id in firing)
+        val restored = AlarmPlanner.reconcileSkips(data, planned, AlarmPlanner.restoreAlarm(skipped, target.id))
+        assertTrue(restored.isEmpty())
+        assertEquals(planned.map { it.id }, AlarmPlanner.alarmsToSchedule(planned, restored).map { it.id })
+    }
+
+    @Test
+    fun changingShiftTypeDropsThatDaysSkips() {
+        val day = work(shifts = mapOf("2026-11-03" to "day", "2026-11-04" to "night"))
+        val now = noon("2026-11-02")
+        val dayPlan = AlarmPlanner.plan(day, now, horizonDays = 4)
+        val daySkip = dayPlan.first { it.date == "2026-11-03" }.id
+        val nightSkip = dayPlan.first { it.date == "2026-11-04" }.id
+        val early = work(shifts = mapOf("2026-11-03" to "day", "2026-11-04" to "night"), early = setOf("2026-11-03"))
+        val earlyPlan = AlarmPlanner.plan(early, now, horizonDays = 4)
+        val kept = AlarmPlanner.reconcileSkips(early, earlyPlan, setOf(daySkip, nightSkip))
+        assertEquals(setOf(nightSkip), kept)
+        assertTrue(earlyPlan.none { it.id == daySkip })
+        assertEquals(earlyPlan.filter { it.id != nightSkip }.map { it.id }, AlarmPlanner.alarmsToSchedule(earlyPlan, kept).map { it.id })
+        assertTrue(earlyPlan.filter { it.date == "2026-11-03" }.all { it.source == "early" })
+    }
+
+    @Test
+    fun leaveDayDropsSkipsSoALaterWorkShiftIsNotBlocked() {
+        val workDay = work(shifts = mapOf("2026-11-03" to "day"))
+        val now = noon("2026-11-02")
+        val planned = AlarmPlanner.plan(workDay, now, horizonDays = 2)
+        val skip = planned.first().id
+        val onLeave = work(shifts = mapOf("2026-11-03" to "day"), leave = setOf("2026-11-03"))
+        val none = AlarmPlanner.plan(onLeave, now, horizonDays = 2)
+        val stored = AlarmPlanner.reconcileSkips(onLeave, none, setOf(skip))
+        assertTrue(stored.isEmpty())
+        val back = AlarmPlanner.reconcileSkips(workDay, planned, stored)
+        assertTrue(back.isEmpty())
+        assertEquals(planned.map { it.id }, AlarmPlanner.alarmsToSchedule(planned, back).map { it.id })
+    }
+
+    @Test
     fun snoozeIsFiveMinutesLater() {
         assertEquals(1_000L + 5 * 60_000L, AlarmPlanner.snoozeTrigger(1_000L))
         assertEquals(5, AlarmPlanner.SNOOZE_MINUTES)

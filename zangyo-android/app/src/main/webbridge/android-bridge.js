@@ -27,8 +27,8 @@
     ["shift", "勤務", "cal"],
     ["year", "年間", "list"],
     ["leave", "年休", "leaf"],
-    ["settings", "控え", "note"],
-    ["alarms", "アラーム", "bell"]
+    ["alarms", "アラーム", "bell"],
+    ["settings", "控え", "note"]
   ];
 
   var current = "shift";
@@ -64,7 +64,9 @@
     ".za-next li{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline;padding:8px 0;border-top:1px solid #e4ddd0;font-size:16px}",
     ".za-next li:first-child{border-top:0}",
     ".za-next b{font-variant-numeric:tabular-nums}",
-    ".za-next span{color:#6f675c;font-size:13px}",
+    ".za-next span{color:#6f675c;font-size:13px;flex:1}",
+    ".za-next li.za-skipped,.za-next li.za-skipped b,.za-next li.za-skipped span{color:#9a948a}",
+    ".za-skip{border:0;background:transparent;color:#1f5c45;font-size:14px;padding:8px 4px;min-width:44px;font-weight:700}",
     ".za-warn{background:#fde8e6;color:#b42318;border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.5;margin:0 0 12px}",
     ".za-ok{background:#e7f1eb;color:#1f5c45;border-radius:10px;padding:10px 12px;font-size:14px;margin:0 0 12px}",
     ".za-msg{min-height:1.2em;color:#b42318;font-size:14px;margin:8px 0 0}",
@@ -154,13 +156,18 @@
     if (!schedule) return '<p class="za-muted">読み込み中です…</p>';
     var items = schedule.items || [];
     if (!items.length) return '<p class="za-muted">この先、鳴る予定はありません。休日と年休の日は鳴りません。</p>';
-    var rows = items.slice(0, 12).map(function (item) {
-      return "<li><b>" + esc(item.time) + "</b> " + esc(item.title) + "<span>" + esc(item.detail) + "</span></li>";
+    var rows = items.map(function (item) {
+      var skipped = !!item.skipped;
+      var button = item.source === "snooze" ? "" : (
+        skipped
+          ? '<button type="button" class="za-skip" data-act="restore-alarm" data-id="' + esc(item.id) + '">戻す</button>'
+          : '<button type="button" class="za-skip" data-act="skip-alarm" data-id="' + esc(item.id) + '">解除</button>'
+      );
+      return '<li class="' + (skipped ? "za-skipped" : "") + '"><b>' + esc(item.time) + "</b> " + esc(item.title) + "<span>" + esc(item.detail) + "</span>" + button + "</li>";
     }).join("");
-    var more = items.length > 12 ? '<p class="za-muted">ほか ' + (items.length - 12) + " 件</p>" : "";
     var days = schedule.horizonDays || 21;
-    return '<ul class="za-next">' + rows + "</ul>" + more +
-      '<p class="za-muted">勤務のアラームは今から' + days + "日分です。毎日、鳴ったあと、スマホを再起動したあとに、先の日も自動で入ります。</p>";
+    return '<ul class="za-next">' + rows + "</ul>" +
+      '<p class="za-muted">勤務のアラームは今から' + days + "日分です。解除した予定は灰色のまま残ります。「戻す」で再び鳴ります。その日の勤務の種類（早出・昼勤・夜勤・休日・年休）を変えると、その日の解除は消えて、新しい勤務のアラームが入ります。</p>";
   }
 
   function refreshBits() {
@@ -263,6 +270,12 @@
     var act = target.dataset.act;
     if (act === "perm") {
       if (window.ZangyoNative && ZangyoNative.openPermissions) ZangyoNative.openPermissions();
+      return;
+    }
+    if (act === "skip-alarm" || act === "restore-alarm") {
+      if (window.ZangyoNative && ZangyoNative.setAlarmSkipped) {
+        ZangyoNative.setAlarmSkipped(target.dataset.id, act === "skip-alarm");
+      }
       return;
     }
     if (act === "add" || act === "del" || act === "reset") {

@@ -99,6 +99,22 @@ object AlarmPlanner {
         return out.sortedWith(compareBy({ it.triggerAtMillis }, { it.id }))
     }
 
+    /** Drop skips whose alarm is gone, or whose day is no longer that shift type. */
+    fun reconcileSkips(data: WorkData, planned: List<PlannedAlarm>, skips: Set<String>): Set<String> {
+        val live = planned.associateBy { it.id }
+        return skips.filter { id ->
+            val alarm = live[id] ?: return@filter false
+            alarmKind(data, alarm.date) == alarm.source
+        }.toSet()
+    }
+
+    fun skipAlarm(skips: Set<String>, id: String): Set<String> = skips + id
+
+    fun restoreAlarm(skips: Set<String>, id: String): Set<String> = skips - id
+
+    fun alarmsToSchedule(planned: List<PlannedAlarm>, skips: Set<String>): List<PlannedAlarm> =
+        planned.filter { it.id !in skips }
+
     fun formatJapaneseDate(date: LocalDate): String {
         val dow = listOf("月", "火", "水", "木", "金", "土", "日")[date.dayOfWeek.value - 1]
         return "${date.monthValue}月${date.dayOfMonth}日（$dow）"
@@ -198,7 +214,7 @@ private fun isIsoDate(text: String): Boolean {
     }
 }
 
-fun plannedToJson(items: List<PlannedAlarm>, horizonDays: Int): String {
+fun plannedToJson(items: List<PlannedAlarm>, horizonDays: Int, skipped: Set<String> = emptySet()): String {
     val array = JSONArray()
     for (item in items) {
         array.put(
@@ -209,7 +225,8 @@ fun plannedToJson(items: List<PlannedAlarm>, horizonDays: Int): String {
                 .put("time", item.time)
                 .put("title", item.title)
                 .put("detail", item.detail)
-                .put("source", item.source),
+                .put("source", item.source)
+                .put("skipped", item.id in skipped),
         )
     }
     return JSONObject()

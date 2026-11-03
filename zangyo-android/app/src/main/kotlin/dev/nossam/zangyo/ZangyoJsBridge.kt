@@ -17,6 +17,12 @@ class ZangyoJsBridge(
     private val main = Handler(Looper.getMainLooper())
 
     @JavascriptInterface
+    fun setAlarmSkipped(id: String, skipped: Boolean) {
+        if (id.length > 400) return
+        AlarmScheduler.enqueue { AlarmScheduler.setAlarmSkipped(appContext, id, skipped) }
+    }
+
+    @JavascriptInterface
     fun onState(json: String) {
         if (json.length > 8_000_000) return
         AlarmScheduler.enqueue { AlarmScheduler.updateWork(appContext, json) }

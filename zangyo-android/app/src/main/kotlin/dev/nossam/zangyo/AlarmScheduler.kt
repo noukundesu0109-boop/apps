@@ -77,6 +77,22 @@ internal object AlarmScheduler {
         UiBridge.publishSchedule(schedule)
     }
 
+    fun setAlarmSkipped(context: Context, id: String, skipped: Boolean) {
+        if (!id.startsWith("s|")) return
+        val app = context.applicationContext
+        val schedule = synchronized(lock) {
+            val store = AlarmStore(app)
+            val data = readWork(store)
+            val planned = AlarmPlanner.plan(data, ZonedDateTime.now(AlarmPlanner.ZONE), AlarmPlanner.DEFAULT_HORIZON_DAYS)
+            if (planned.none { it.id == id }) return@synchronized rebuild(app)
+            var skips = AlarmPlanner.reconcileSkips(data, planned, store.readSkips())
+            skips = if (skipped) AlarmPlanner.skipAlarm(skips, id) else AlarmPlanner.restoreAlarm(skips, id)
+            store.writeSkips(skips)
+            rebuild(app)
+        }
+        UiBridge.publishSchedule(schedule)
+    }
+
     fun canExact(context: Context): Boolean {
         val manager = context.getSystemService(AlarmManager::class.java) ?: return false
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -90,11 +106,10 @@ internal object AlarmScheduler {
         val store = AlarmStore(context)
         val data = readWork(store)
         val now = ZonedDateTime.now(AlarmPlanner.ZONE)
-        val planned = AlarmPlanner.plan(
-            data,
-            now,
-            AlarmPlanner.DEFAULT_HORIZON_DAYS,
-        ).toMutableList()
+        val shiftPlan = AlarmPlanner.plan(data, now, AlarmPlanner.DEFAULT_HORIZON_DAYS)
+        val skips = AlarmPlanner.reconcileSkips(data, shiftPlan, store.readSkips())
+        store.writeSkips(skips)
+        val planned = AlarmPlanner.alarmsToSchedule(shiftPlan, skips).toMutableList()
         val snoozes = store.readSnoozes().filter { it.atMillis > System.currentTimeMillis() + 5_000L }
         store.writeSnoozes(snoozes)
         for (snooze in snoozes) {
@@ -124,8 +139,10 @@ internal object AlarmScheduler {
             scheduleMaintenance(context, manager, codes.getValue("maintenance"), maintenanceAt(now), exact)
         }
         store.writeCodes(codes)
-        Log.i(TAG, "scheduled ${planned.size} alarms exact=$exact")
-        return plannedToJson(planned, AlarmPlanner.DEFAULT_HORIZON_DAYS)
+        Log.i(TAG, "scheduled ${planned.size} alarms exact=$exact skipped=${skips.size}")
+        val shown = (shiftPlan + planned.filter { it.source == "snooze" })
+            .sortedWith(compareBy({ it.triggerAtMillis }, { it.id }))
+        return plannedToJson(shown, AlarmPlanner.DEFAULT_HORIZON_DAYS, skips)
     }
 
     private fun readWork(store: AlarmStore): WorkData {

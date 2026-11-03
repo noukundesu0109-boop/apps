@@ -1,6 +1,7 @@
 package dev.nossam.zangyo
 
 import android.content.Context
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
@@ -73,6 +74,27 @@ internal class AlarmStore(context: Context) {
         } catch (_: Exception) {
             emptyMap()
         }
+    }
+
+    fun readSkips(): Set<String> {
+        val text = read(file("skipped-alarms.json")) ?: return emptySet()
+        return try {
+            val array = JSONObject(text).optJSONArray("ids") ?: return emptySet()
+            buildSet {
+                for (i in 0 until array.length()) {
+                    val id = array.optString(i)
+                    if (id.isNotBlank()) add(id)
+                }
+            }
+        } catch (_: Exception) {
+            emptySet()
+        }
+    }
+
+    fun writeSkips(ids: Set<String>) {
+        val array = JSONArray()
+        for (id in ids) array.put(id)
+        write(file("skipped-alarms.json"), JSONObject().put("ids", array).toString())
     }
 
     fun writeCodes(codes: Map<String, Int>) {

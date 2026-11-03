@@ -13,8 +13,8 @@ android {
         applicationId = "dev.nossam.zangyo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.0.3"
     }
 
     buildTypes {
@@ -110,7 +110,24 @@ fun patchIndex(html: String): String {
         "データはこのブラウザにだけ残ります。月に1回はバックアップを保存してください。",
         "データはこのアプリの中だけに残ります。月に1回はバックアップを保存してください。鳴る時刻は「アラーム」です。",
     )
+    text = moveLeaveSettings(text)
     return text
+}
+
+fun moveLeaveSettings(text: String): String {
+    val cardStartMarker = "(0,A.jsxs)(yt,{className:`space-y-2 text-sm`,children:[(0,A.jsx)(`h2`,{className:`font-semibold`,children:`年休の設定`})"
+    val backupMarker = ",(0,A.jsxs)(yt,{children:[(0,A.jsx)(`h2`,{className:`mb-1 font-semibold`,children:`バックアップ`})"
+    val start = text.indexOf(cardStartMarker)
+    if (start < 0) error("年休の設定が見つかりません")
+    val end = text.indexOf(backupMarker, start)
+    if (end < 0) error("バックアップの直前が見つかりません")
+    val card = text.substring(start, end)
+    val withoutCard = text.removeRange(start, end + 1)
+    val anchor = "設定は「控え」タブで直せます。`]})]}),"
+    val at = withoutCard.indexOf(anchor)
+    if (at < 0 || withoutCard.indexOf(anchor, at + anchor.length) >= 0) error("年休タブの挿入位置が見つかりません")
+    val insertion = "設定はこの画面で直せます。" + "`]})" + "," + card + "]})" + ","
+    return withoutCard.replaceRange(at, at + anchor.length, insertion)
 }
 
 private fun replaceOne(text: String, old: String, new: String): String {
