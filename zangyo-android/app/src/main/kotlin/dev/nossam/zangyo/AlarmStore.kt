@@ -1,9 +1,6 @@
 package dev.nossam.zangyo
 
 import android.content.Context
-import dev.nossam.zangyo.plan.Reminder
-import dev.nossam.zangyo.plan.parseReminders
-import dev.nossam.zangyo.plan.remindersToJson
 import org.json.JSONObject
 import java.io.File
 
@@ -20,10 +17,6 @@ internal class AlarmStore(context: Context) {
     fun readWork(): String? = read(file("work-state.json"))
 
     fun writeWork(json: String) = write(file("work-state.json"), json)
-
-    fun readReminders(): List<Reminder> = parseReminders(read(file("reminders.json")) ?: "[]")
-
-    fun writeReminders(items: List<Reminder>) = write(file("reminders.json"), remindersToJson(items))
 
     fun readSnoozes(): List<StoredSnooze> {
         val text = read(file("snoozes.json")) ?: return emptyList()

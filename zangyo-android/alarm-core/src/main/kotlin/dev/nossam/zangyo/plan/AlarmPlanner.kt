@@ -21,7 +21,6 @@ object AlarmPlanner {
     val ZONE: ZoneId = ZoneId.of("Asia/Tokyo")
     const val DEFAULT_HORIZON_DAYS = 21
     const val SNOOZE_MINUTES = 5
-    private const val REMINDER_YEARS = 2L
 
     val KIND_LABELS = mapOf(
         "early" to "早出の昼勤",
@@ -63,7 +62,6 @@ object AlarmPlanner {
 
     fun plan(
         data: WorkData,
-        reminders: List<Reminder>,
         now: ZonedDateTime,
         horizonDays: Int = DEFAULT_HORIZON_DAYS,
     ): List<PlannedAlarm> {
@@ -98,30 +96,6 @@ object AlarmPlanner {
             date = date.plusDays(1)
         }
 
-        val reminderLimit = nowZ.plusYears(REMINDER_YEARS).toInstant()
-        for (reminder in reminders) {
-            val day = try {
-                LocalDate.parse(reminder.date)
-            } catch (_: DateTimeParseException) {
-                continue
-            }
-            val time = parseTime(reminder.time) ?: continue
-            val whenAt = day.atTime(time).atZone(ZONE)
-            val instant = whenAt.toInstant()
-            if (!instant.isAfter(nowInstant) || instant.isAfter(reminderLimit)) continue
-            val title = reminder.name.trim().ifEmpty { "リマインド" }
-            val stableId = reminder.id.ifBlank { "anon|${reminder.date}|${reminder.time}|$title" }
-            out += PlannedAlarm(
-                id = "r|$stableId|${reminder.date}|${reminder.time}",
-                triggerAtMillis = instant.toEpochMilli(),
-                date = reminder.date,
-                time = reminder.time,
-                title = title,
-                detail = formatJapaneseDate(day),
-                source = "reminder",
-            )
-        }
-
         return out.sortedWith(compareBy({ it.triggerAtMillis }, { it.id }))
     }
 
@@ -146,13 +120,6 @@ data class WorkData(
     val early: Set<String>,
     val leave: Set<String>,
     val alarms: Map<String, List<AlarmRow>>,
-)
-
-data class Reminder(
-    val id: String,
-    val name: String,
-    val date: String,
-    val time: String,
 )
 
 data class PlannedAlarm(
@@ -188,25 +155,6 @@ fun parseWorkData(json: String): WorkData {
         leave = readDates(root.opt("leave")),
         alarms = readAlarms(root.opt("alarms")),
     )
-}
-
-fun parseReminders(json: String): List<Reminder> {
-    val array = try {
-        JSONArray(json)
-    } catch (_: Exception) {
-        return emptyList()
-    }
-    val out = ArrayList<Reminder>(array.length())
-    for (i in 0 until array.length()) {
-        val item = array.optJSONObject(i) ?: continue
-        val date = item.optString("date")
-        val time = item.optString("time")
-        if (!isIsoDate(date) || AlarmPlanner.parseTime(time) == null) continue
-        val name = item.optString("name")
-        val id = item.optString("id").ifBlank { "anon|$date|$time|$name" }
-        out += Reminder(id = id, name = name, date = date, time = time)
-    }
-    return out
 }
 
 private fun readAlarms(raw: Any?): Map<String, List<AlarmRow>> {
@@ -248,20 +196,6 @@ private fun isIsoDate(text: String): Boolean {
     } catch (_: DateTimeParseException) {
         false
     }
-}
-
-fun remindersToJson(items: List<Reminder>): String {
-    val array = JSONArray()
-    for (item in items) {
-        array.put(
-            JSONObject()
-                .put("id", item.id)
-                .put("name", item.name)
-                .put("date", item.date)
-                .put("time", item.time),
-        )
-    }
-    return array.toString()
 }
 
 fun plannedToJson(items: List<PlannedAlarm>, horizonDays: Int): String {

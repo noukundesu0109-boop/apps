@@ -13,8 +13,8 @@ android {
         applicationId = "dev.nossam.zangyo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.0.2"
     }
 
     buildTypes {
@@ -102,23 +102,13 @@ fun patchIndex(html: String): String {
     )
     text = replaceOne(
         text,
-        "fe=()=>JSON.stringify({...n,app:`zangyo`,savedAt:new Date().toISOString()},null,2)+`\n`",
-        "fe=()=>JSON.stringify({...n,app:`zangyo`,savedAt:new Date().toISOString(),reminders:window.__zangyoExportReminders?window.__zangyoExportReminders():void 0},null,2)+`\n`",
-    )
-    text = replaceOne(
-        text,
         "ve=async()=>{let e=ue(),t=fe();try{if(typeof File",
         "ve=async()=>{let e=ue(),t=fe();try{if(window.ZangyoNative&&window.ZangyoNative.saveBackup){window.ZangyoNative.saveBackup(e,t);p(`保存先を選んでください`);return}}catch(e){}try{if(typeof File",
     )
     text = replaceOne(
         text,
-        "p(n?`復元しました`:`復元しました（勤務カレンダーは今のまま）`)}catch",
-        "p(n?`復元しました`:`復元しました（勤務カレンダーは今のまま）`);try{window.__zangyoImportReminders&&window.__zangyoImportReminders(t.reminders)}catch(e){}}catch",
-    )
-    text = replaceOne(
-        text,
         "データはこのブラウザにだけ残ります。月に1回はバックアップを保存してください。",
-        "データはこのアプリの中だけに残ります。月に1回はバックアップを保存してください。鳴る時刻は「アラーム」、単発の予定は「リマインド」です。",
+        "データはこのアプリの中だけに残ります。月に1回はバックアップを保存してください。鳴る時刻は「アラーム」です。",
     )
     return text
 }

@@ -9,7 +9,6 @@ import android.util.Log
 import dev.nossam.zangyo.plan.AlarmPlanner
 import dev.nossam.zangyo.plan.PlannedAlarm
 import dev.nossam.zangyo.plan.WorkData
-import dev.nossam.zangyo.plan.parseReminders
 import dev.nossam.zangyo.plan.parseWorkData
 import dev.nossam.zangyo.plan.plannedToJson
 import java.time.Instant
@@ -48,17 +47,6 @@ internal object AlarmScheduler {
         val app = context.applicationContext
         val schedule = synchronized(lock) {
             AlarmStore(app).writeWork(json)
-            rebuild(app)
-        }
-        UiBridge.publishSchedule(schedule)
-    }
-
-    fun updateReminders(context: Context, json: String) {
-        if (!json.trimStart().startsWith("[")) return
-        val parsed = parseReminders(json)
-        val app = context.applicationContext
-        val schedule = synchronized(lock) {
-            AlarmStore(app).writeReminders(parsed)
             rebuild(app)
         }
         UiBridge.publishSchedule(schedule)
@@ -104,7 +92,6 @@ internal object AlarmScheduler {
         val now = ZonedDateTime.now(AlarmPlanner.ZONE)
         val planned = AlarmPlanner.plan(
             data,
-            store.readReminders(),
             now,
             AlarmPlanner.DEFAULT_HORIZON_DAYS,
         ).toMutableList()

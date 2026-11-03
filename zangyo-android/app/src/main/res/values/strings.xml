@@ -2,5 +2,5 @@
 <resources>
     <string name="app_name">就業</string>
     <string name="channel_name">アラーム</string>
-    <string name="channel_desc">勤務とリマインドのアラーム</string>
+    <string name="channel_desc">勤務のアラーム</string>
 </resources>

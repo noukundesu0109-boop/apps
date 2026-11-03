@@ -25,7 +25,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:lineSpacingExtra="4dp"
-            android:text="勤務の日や、リマインドで入れた時刻に、画面が消えていても鳴るようにします。下を順にオンにしてください。"
+            android:text="勤務の日に、画面が消えていても鳴るようにします。下を順にオンにしてください。"
             android:textColor="@color/ink"
             android:textSize="17sp" />
 

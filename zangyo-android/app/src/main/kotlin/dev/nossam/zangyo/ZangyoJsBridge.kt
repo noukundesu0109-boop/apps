@@ -23,12 +23,6 @@ class ZangyoJsBridge(
     }
 
     @JavascriptInterface
-    fun onReminders(json: String) {
-        if (json.length > 2_000_000) return
-        AlarmScheduler.enqueue { AlarmScheduler.updateReminders(appContext, json) }
-    }
-
-    @JavascriptInterface
     fun saveBackup(name: String, content: String) {
         if (content.length > 8_000_000) return
         main.post { ui.shareBackup(name, content) }
