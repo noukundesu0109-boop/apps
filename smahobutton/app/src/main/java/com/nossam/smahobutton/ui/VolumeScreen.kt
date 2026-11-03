@@ -3,6 +3,7 @@ package com.nossam.smahobutton.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -59,8 +60,10 @@ fun VolumeScreen(
     val saved = settings.appVolumes.map { it.packageName }.toSet()
     val suggestions = remember(installed, saved) { suggestApps(installed, saved) }
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text("アプリごとの音量") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

@@ -10,6 +10,7 @@ import com.nossam.smahobutton.logic.AppVolumeSpec
 import com.nossam.smahobutton.logic.ButtonSpec
 import com.nossam.smahobutton.logic.TYPE_OPEN_APP
 import com.nossam.smahobutton.logic.defaultButton
+import com.nossam.smahobutton.runtime.SmahoRuntime
 import kotlinx.coroutines.launch
 
 data class PendingAppPick(val buttonId: String, val slot: String)
@@ -20,6 +21,13 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     var pendingAppPick: PendingAppPick? = null
 
     fun setEnabled(on: Boolean) = edit { it.copy(enabled = on) }
+
+    fun replaceAll(spec: com.nossam.smahobutton.logic.SettingsSpec) {
+        viewModelScope.launch {
+            repo.replace(spec)
+            repo.state.value?.let { SmahoRuntime.refreshButtons(it) }
+        }
+    }
 
     fun addButton() = edit { settings ->
         if (settings.buttons.size >= 5) settings

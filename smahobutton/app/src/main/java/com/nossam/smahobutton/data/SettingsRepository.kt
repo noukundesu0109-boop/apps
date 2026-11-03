@@ -39,6 +39,12 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun current(): SettingsSpec = settings.first()
 
+    suspend fun replace(spec: SettingsSpec) {
+        val encoded = SettingsJson.encode(spec)
+        context.dataStore.edit { prefs -> prefs[key] = encoded }
+        state.value = SettingsJson.decode(encoded)
+    }
+
     suspend fun update(transform: (SettingsSpec) -> SettingsSpec) {
         try {
             context.dataStore.edit { prefs ->

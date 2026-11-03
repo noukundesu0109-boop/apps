@@ -8,7 +8,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -48,11 +51,17 @@ class MainActivity : ComponentActivity() {
             val viewModel: SettingsViewModel = viewModel()
             val settings by viewModel.settings.collectAsStateWithLifecycle()
             SmahoTheme {
-                val current = settings
-                if (current == null) {
-                    Loading()
-                } else {
-                    AppNav(current, viewModel, start)
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .windowInsetsPadding(WindowInsets.safeDrawing),
+                ) {
+                    val current = settings
+                    if (current == null) {
+                        Loading()
+                    } else {
+                        AppNav(current, viewModel, start)
+                    }
                 }
             }
         }
@@ -90,6 +99,7 @@ private fun AppNav(settings: SettingsSpec, viewModel: SettingsViewModel, start: 
                 onToggle = viewModel::setEnabled,
                 onButtons = { nav.navigate(ROUTE_BUTTONS) },
                 onVolumes = { nav.navigate(ROUTE_VOLUMES) },
+                onRestore = viewModel::replaceAll,
             )
         }
         composable(ROUTE_BUTTONS) {
