@@ -35,6 +35,9 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
+    private companion object {
+        const val DRIVE_TAG = "TaskDrive"
+    }
     private lateinit var webView: WebView
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var guideShown = false
@@ -203,58 +206,72 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
     }
 
     override fun saveToDrive(name: String, content: String) {
-        if (name.isBlank() || name.length > 200 || content.length > 8_000_000) {
-            finishDrive(DriveNotice("error", DriveMessages.GENERIC))
-            return
-        }
-        if (!driveOnline()) {
-            finishDrive(DriveNotice("offline", DriveMessages.OFFLINE))
-            return
-        }
-        if (!driveBusy.compareAndSet(false, true)) return
-        driveName = name
-        driveContent = content
-        val request = AuthorizationRequest.builder()
-            .setRequestedScopes(listOf(Scope(DriveMessages.SCOPE)))
-            .build()
-        Identity.getAuthorizationClient(this)
-            .authorize(request)
-            .addOnSuccessListener(this) { auth ->
-                if (auth.hasResolution()) {
-                    val pending = auth.pendingIntent
-                    if (pending == null) {
-                        finishDrive(DriveMessages.noticeForStatus(-1))
-                    } else {
-                        try {
-                            driveConsent.launch(IntentSenderRequest.Builder(pending).build())
-                        } catch (_: Exception) {
-                            finishDrive(DriveMessages.noticeForStatus(-1))
+        try {
+            if (name.isBlank() || name.length > 200 || content.length > 8_000_000) {
+                finishDrive(DriveNotice("error", DriveMessages.GENERIC))
+                return
+            }
+            if (!driveOnline()) {
+                finishDrive(DriveNotice("offline", DriveMessages.OFFLINE))
+                return
+            }
+            if (!driveBusy.compareAndSet(false, true)) return
+            driveName = name
+            driveContent = content
+            val request = AuthorizationRequest.builder()
+                .setRequestedScopes(listOf(Scope(DriveMessages.SCOPE)))
+                .build()
+            Identity.getAuthorizationClient(this)
+                .authorize(request)
+                .addOnSuccessListener(this) { auth ->
+                    try {
+                        if (auth.hasResolution()) {
+                            val pending = auth.pendingIntent
+                            if (pending == null) {
+                                finishDrive(DriveMessages.noticeForStatus(-1))
+                            } else {
+                                driveConsent.launch(IntentSenderRequest.Builder(pending).build())
+                            }
+                        } else {
+                            val token = auth.accessToken
+                            if (token.isNullOrBlank()) finishDrive(DriveMessages.noticeForStatus(-1))
+                            else uploadDrive(token)
                         }
+                    } catch (error: Throwable) {
+                        android.util.Log.e(DRIVE_TAG, "drive consent could not start", error)
+                        finishDrive(DriveMessages.noticeForStatus(-1))
                     }
-                } else {
-                    val token = auth.accessToken
-                    if (token.isNullOrBlank()) finishDrive(DriveMessages.noticeForStatus(-1))
-                    else uploadDrive(token)
                 }
-            }
-            .addOnFailureListener(this) { error ->
-                val code = (error as? ApiException)?.statusCode ?: -1
-                finishDrive(DriveMessages.noticeForStatus(code))
-            }
+                .addOnFailureListener(this) { error ->
+                    try {
+                        val code = (error as? ApiException)?.statusCode ?: -1
+                        finishDrive(DriveMessages.noticeForStatus(code))
+                    } catch (failure: Throwable) {
+                        android.util.Log.e(DRIVE_TAG, "drive failure could not be shown", failure)
+                        driveBusy.set(false)
+                    }
+                }
+        } catch (error: Throwable) {
+            android.util.Log.e(DRIVE_TAG, "drive save crashed", error)
+            finishDrive(DriveNotice("error", DriveMessages.GENERIC))
+        }
     }
 
     private fun onDriveConsent(resultCode: Int, data: Intent?) {
-        if (resultCode != RESULT_OK || data == null) {
-            finishDrive(DriveNotice("cancel", DriveMessages.CANCEL))
-            return
-        }
         try {
+            if (resultCode != RESULT_OK || data == null) {
+                finishDrive(DriveNotice("cancel", DriveMessages.CANCEL))
+                return
+            }
             val auth = Identity.getAuthorizationClient(this).getAuthorizationResultFromIntent(data)
             val token = auth.accessToken
             if (token.isNullOrBlank()) finishDrive(DriveMessages.noticeForStatus(-1))
             else uploadDrive(token)
         } catch (error: ApiException) {
             finishDrive(DriveMessages.noticeForStatus(error.statusCode))
+        } catch (error: Throwable) {
+            android.util.Log.e(DRIVE_TAG, "drive consent failed", error)
+            finishDrive(DriveNotice("error", DriveMessages.GENERIC))
         }
     }
 
@@ -270,31 +287,46 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
                 DriveClient.save(token, name, content, drivePrefix).toString()
             } catch (error: DriveFailure) {
                 JSONObject().put("ok", false).put("reason", error.notice.reason).put("message", error.notice.message).toString()
-            } catch (_: Exception) {
+            } catch (error: Throwable) {
+                android.util.Log.e(DRIVE_TAG, "drive upload failed", error)
                 JSONObject().put("ok", false).put("reason", "error").put("message", DriveMessages.GENERIC).toString()
             }
             runOnUiThread {
-                driveBusy.set(false)
-                deliver("window.__taskDriveDone", json)
+                try {
+                    driveBusy.set(false)
+                    deliver("window.__taskDriveDone", json)
+                } catch (error: Throwable) {
+                    android.util.Log.e(DRIVE_TAG, "drive result could not be shown", error)
+                    driveBusy.set(false)
+                }
             }
         }.start()
     }
 
     private fun finishDrive(notice: DriveNotice) {
         driveBusy.set(false)
-        val json = JSONObject()
-            .put("ok", false)
-            .put("reason", notice.reason)
-            .put("message", notice.message)
-            .toString()
-        deliver("window.__taskDriveDone", json)
+        try {
+            val json = JSONObject()
+                .put("ok", false)
+                .put("reason", notice.reason)
+                .put("message", notice.message)
+                .toString()
+            deliver("window.__taskDriveDone", json)
+        } catch (error: Throwable) {
+            android.util.Log.e(DRIVE_TAG, "drive message could not be shown", error)
+        }
     }
 
     private fun driveOnline(): Boolean {
-        val manager = getSystemService(ConnectivityManager::class.java) ?: return true
-        val network = manager.activeNetwork ?: return false
-        val caps = manager.getNetworkCapabilities(network) ?: return false
-        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        return try {
+            val manager = getSystemService(ConnectivityManager::class.java) ?: return true
+            val network = manager.activeNetwork ?: return false
+            val caps = manager.getNetworkCapabilities(network) ?: return false
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        } catch (error: Throwable) {
+            android.util.Log.w(DRIVE_TAG, "could not read the network state", error)
+            true
+        }
     }
 
     private fun deliver(functionName: String, json: String) {
