@@ -13,8 +13,8 @@ android {
         applicationId = "dev.nossam.task"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.2.1"
+        versionCode = 6
+        versionName = "1.3.0"
     }
 
     buildTypes {
@@ -78,6 +78,9 @@ val prepareWeb = tasks.register("prepareTaskWeb") {
         check(index.contains("__taskDriveDone")) { "drive save was not switched to Android sign-in" }
         check(index.contains("__taskShift")) { "postpone bridge was not injected" }
         check(index.contains("task-ring-host")) { "per-tab ring setting was not injected" }
+        check(index.contains("data-voice")) { "voice button was not injected" }
+        check(index.contains("__taskAddMemo")) { "voice save bridge was not injected" }
+        check(index.contains("task-voice-host")) { "voice setting was not injected" }
         check(index.contains("にずらし中")) { "postpone label was not injected" }
         check(index.contains("新しい1件だけを残し")) { "drive keep-one text was not updated" }
         check(!index.contains("serviceWorker.register")) { "service worker registration still present" }
@@ -150,7 +153,7 @@ fun patchIndex(html: String): String {
     text = replaceOne(
         text,
         """(0,l.useEffect)(()=>{try{localStorage.setItem(Ze,JSON.stringify(n))}catch{}},[n])""",
-        """(0,l.useEffect)(()=>{try{localStorage.setItem(Ze,JSON.stringify(n))}catch(e){}try{window.__taskGet=function(){return n};window.__taskSet=r;window.__taskSetTab=a;window.__taskOpen=v;window.__taskShift=function(kind,id,tabId,date){let s=/^\d{4}-\d{2}-\d{2}$/.test(date)?date:null;if(kind===`c`||kind===`clean`)ce(id,{shift:s});else if(kind===`b`||kind===`bousai`)ue(id,{shift:s});else if(tabId)me(tabId,id,{shift:s})};window.__taskSetRing=function(id,on){r(function(s){let rings=Object.assign({memo:!0},s.rings||{});rings[id]=!!on;return Object.assign({},s,{rings:rings})})}}catch(e){}try{window.TaskNative&&window.TaskNative.onState(JSON.stringify(n))}catch(e){}try{window.__taskOnData&&window.__taskOnData(n)}catch(e){}},[n])""",
+        """(0,l.useEffect)(()=>{try{localStorage.setItem(Ze,JSON.stringify(n))}catch(e){}try{window.__taskGet=function(){return n};window.__taskSet=r;window.__taskSetTab=a;window.__taskOpen=v;window.__taskShift=function(kind,id,tabId,date){let s=/^\d{4}-\d{2}-\d{2}$/.test(date)?date:null;if(kind===`c`||kind===`clean`)ce(id,{shift:s});else if(kind===`b`||kind===`bousai`)ue(id,{shift:s});else if(tabId)me(tabId,id,{shift:s})};window.__taskSetRing=function(id,on){r(function(s){let rings=Object.assign({memo:!0},s.rings||{});rings[id]=!!on;return Object.assign({},s,{rings:rings})})};window.__taskAddMemo=function(text,due,time){let body=String(text||``).trim();if(!body)return!1;let day=/^\d{4}-\d{2}-\d{2}$/.test(String(due||``))?due:null;let clock=/^\d{2}:\d{2}$/.test(String(time||``))?time:``;try{a(`memo`)}catch(err){}D(body,day,!1,clock);return!0}}catch(e){}try{window.TaskNative&&window.TaskNative.onState(JSON.stringify(n))}catch(e){}try{window.__taskOnData&&window.__taskOnData(n)}catch(e){}},[n])""",
     )
     text = replaceOne(
         text,
@@ -204,6 +207,11 @@ fun patchIndex(html: String): String {
     )
     text = replaceOne(
         text,
+        """enterKeyHint:`done`,onChange:e=>c(e.target.value),onKeyDown:e=>{e.key===`Enter`&&!e.nativeEvent.isComposing&&e.keyCode!==229&&(e.preventDefault(),h())}}),(0,A.jsxs)(M,{className:`shrink-0 px-4`,"data-memo-add":!0,onClick:h,children:[(0,A.jsx)(O,{size:16}),`追加`]})""",
+        """enterKeyHint:`done`,onChange:e=>c(e.target.value),onKeyDown:e=>{e.key===`Enter`&&!e.nativeEvent.isComposing&&e.keyCode!==229&&(e.preventDefault(),h())}}),(0,A.jsx)(`button`,{type:`button`,className:`grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-line bg-card text-forest`,"data-voice":!0,"aria-label":`声で入れる`,onClick:()=>{try{window.TaskNative&&TaskNative.startVoice()}catch(e){}},children:(0,A.jsx)(`svg`,{width:`22`,height:`22`,viewBox:`0 0 24 24`,fill:`currentColor`,"aria-hidden":`true`,children:(0,A.jsx)(`path`,{d:`M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z`})})}),(0,A.jsxs)(M,{className:`shrink-0 px-4`,"data-memo-add":!0,onClick:h,children:[(0,A.jsx)(O,{size:16}),`追加`]})""",
+    )
+    text = replaceOne(
+        text,
         """(0,A.jsx)(Wt,{label:`やった日`,children:(0,A.jsx)(`input`,{type:`date`,className:N,value:a.done??``,onChange:s(`done`)})}),(0,A.jsx)(Wt,{label:`周期（日）`,""",
         """(0,A.jsx)(Wt,{label:`やった日`,children:(0,A.jsx)(`input`,{type:`date`,className:N,value:a.done??``,onChange:s(`done`)})}),(0,A.jsx)(Wt,{label:`時刻（なくても可）`,children:(0,A.jsx)(`input`,{type:`time`,step:`60`,className:N,value:a.time??``,onChange:s(`time`)})}),(0,A.jsx)(Wt,{label:`周期（日）`,""",
     )
@@ -225,7 +233,7 @@ fun patchIndex(html: String): String {
     text = replaceOne(
         text,
         """i===`settings`&&(0,A.jsxs)(`div`,{className:`space-y-3`,children:[(0,A.jsxs)(`div`,{className:`rounded-xl border border-line bg-card p-4`,children:""",
-        """i===`settings`&&(0,A.jsxs)(`div`,{className:`space-y-3`,children:[(0,A.jsx)(`div`,{id:`task-summary-host`,className:`mb-3`}),(0,A.jsx)(`div`,{id:`task-ring-host`,className:`mb-3`}),(0,A.jsxs)(`div`,{className:`rounded-xl border border-line bg-card p-4`,children:""",
+        """i===`settings`&&(0,A.jsxs)(`div`,{className:`space-y-3`,children:[(0,A.jsx)(`div`,{id:`task-summary-host`,className:`mb-3`}),(0,A.jsx)(`div`,{id:`task-ring-host`,className:`mb-3`}),(0,A.jsx)(`div`,{id:`task-voice-host`,className:`mb-3`}),(0,A.jsxs)(`div`,{className:`rounded-xl border border-line bg-card p-4`,children:""",
     )
     text = replaceOne(
         text,

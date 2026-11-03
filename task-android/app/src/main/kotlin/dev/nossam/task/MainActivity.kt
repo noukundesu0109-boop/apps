@@ -1,13 +1,16 @@
 package dev.nossam.task
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
+import android.speech.RecognizerIntent
 import android.webkit.JsResult
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -22,6 +25,7 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.webkit.WebViewAssetLoader
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
@@ -30,15 +34,20 @@ import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import dev.nossam.task.drive.DriveMessages
 import dev.nossam.task.drive.DriveNotice
+import dev.nossam.task.voice.VoiceMemoParser
 import org.json.JSONObject
 import java.io.File
+import java.time.ZonedDateTime
 import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
-    private companion object {
-        const val DRIVE_TAG = "TaskDrive"
+    companion object {
+        const val EXTRA_VOICE = "dev.nossam.task.extra.VOICE"
+        private const val DRIVE_TAG = "TaskDrive"
     }
     private lateinit var webView: WebView
+    private var pageReady = false
+    private var pendingVoice = false
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var guideShown = false
     private var driveName: String? = null
@@ -48,6 +57,14 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
 
     private val driveConsent = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         onDriveConsent(result.resultCode, result.data)
+    }
+
+    private val voiceLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        onVoiceResult(result.resultCode, result.data)
+    }
+
+    private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) launchRecognizer() else deliverVoiceError(getString(R.string.voice_denied))
     }
 
     private val fileChooser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -78,8 +95,10 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
+                pageReady = true
                 deliver("window.__taskPermStatus", PermissionGate.statusJson(this@MainActivity))
                 UiBridge.lastSchedule?.let { deliver("window.__taskShowSchedule", it) }
+                maybeStartVoice()
             }
         }
         webView.webChromeClient = object : WebChromeClient() {
@@ -156,6 +175,86 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
             },
         )
         webView.loadUrl("https://appassets.androidplatform.net/assets/index.html")
+        noteVoiceIntent(intent, savedInstanceState == null)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        noteVoiceIntent(intent, openedFresh = true)
+        maybeStartVoice()
+    }
+
+    private fun noteVoiceIntent(intent: Intent?, openedFresh: Boolean) {
+        if (wantsVoice(intent)) {
+            pendingVoice = true
+            return
+        }
+        val launcher = intent?.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER)
+        if (openedFresh && launcher && VoiceSettings.listenOnOpen(this)) pendingVoice = true
+    }
+
+    private fun wantsVoice(intent: Intent?): Boolean {
+        if (intent == null) return false
+        if (intent.getBooleanExtra(EXTRA_VOICE, false)) return true
+        return intent.getStringExtra(EXTRA_VOICE) == "true"
+    }
+
+    private fun maybeStartVoice() {
+        if (!pageReady || !pendingVoice) return
+        pendingVoice = false
+        startVoice()
+    }
+
+    override fun startVoice() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            micPermission.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        launchRecognizer()
+    }
+
+    private fun launchRecognizer() {
+        val recognize = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ja-JP")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ja-JP")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, getString(R.string.voice_prompt))
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+        }
+        if (recognize.resolveActivity(packageManager) == null) {
+            deliverVoiceError(getString(R.string.voice_unavailable))
+            return
+        }
+        try {
+            voiceLauncher.launch(recognize)
+        } catch (_: ActivityNotFoundException) {
+            deliverVoiceError(getString(R.string.voice_unavailable))
+        }
+    }
+
+    private fun onVoiceResult(resultCode: Int, data: Intent?) {
+        if (resultCode == RESULT_CANCELED) return
+        val spoken = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull { it.isNotBlank() }
+        if (resultCode != RESULT_OK || spoken.isNullOrBlank()) {
+            deliverVoiceError(getString(R.string.voice_nomatch))
+            return
+        }
+        val parsed = VoiceMemoParser.parse(spoken, ZonedDateTime.now(VoiceMemoParser.ZONE))
+        val json = JSONObject()
+            .put("ok", true)
+            .put("spoken", spoken)
+            .put("text", parsed.content)
+            .put("date", parsed.date?.toString() ?: JSONObject.NULL)
+            .put("time", parsed.time?.let { "%02d:%02d".format(it.hour, it.minute) } ?: JSONObject.NULL)
+            .toString()
+        deliver("window.__taskVoiceHeard", json)
+    }
+
+    private fun deliverVoiceError(message: String) {
+        if (!pageReady) Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        val json = JSONObject().put("ok", false).put("message", message).toString()
+        deliver("window.__taskVoiceHeard", json)
     }
 
     override fun onResume() {

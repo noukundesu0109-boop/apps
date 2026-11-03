@@ -5,4 +5,10 @@
     <string name="channel_desc">メモの時刻アラーム</string>
     <string name="summary_channel_name">朝のまとめ</string>
     <string name="summary_channel_desc">その日のメモと、掃除・防災・車の予定を知らせます</string>
+    <string name="voice_label">声でメモ</string>
+    <string name="voice_widget_desc">話して予定を入れます</string>
+    <string name="voice_prompt">予定を話してください</string>
+    <string name="voice_denied">マイクが許可されていないので、声では入れられません。設定からマイクをオンにしてください</string>
+    <string name="voice_unavailable">このスマホでは声の入力が使えません</string>
+    <string name="voice_nomatch">聞き取れませんでした。もう一度話してください</string>
 </resources>

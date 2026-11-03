@@ -13,6 +13,7 @@ class TaskJsBridge(
         fun shareBackup(name: String, content: String)
         fun saveToDrive(name: String, content: String)
         fun openPermissions()
+        fun startVoice()
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -37,6 +38,20 @@ class TaskJsBridge(
     @JavascriptInterface
     fun openPermissions() {
         main.post { ui.openPermissions() }
+    }
+
+    @JavascriptInterface
+    fun startVoice() {
+        main.post { ui.startVoice() }
+    }
+
+    @JavascriptInterface
+    fun getListenOnOpen(): String = if (VoiceSettings.listenOnOpen(appContext)) "true" else "false"
+
+    @JavascriptInterface
+    fun setListenOnOpen(value: String) {
+        if (value.length > 8) return
+        VoiceSettings.setListenOnOpen(appContext, value == "true")
     }
 
     @JavascriptInterface
