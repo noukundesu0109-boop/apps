@@ -2,6 +2,7 @@ package dev.nossam.task.plan
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 import java.time.LocalTime
@@ -47,16 +48,16 @@ class TaskBoardTest {
                 "memo" to "完了",
                 "memo" to "朝",
                 "memo" to "午後",
-                "memo" to "日付だけ",
+                "car" to "エンジンオイル",
                 "clean" to "居間 床",
                 "clean" to "当日",
+                "memo" to "日付だけ",
                 "bousai" to "水（1箱）",
-                "car" to "エンジンオイル",
             ),
             titles,
         )
         assertEquals("clean", MemoPlanner.itemsOn(sample(), "2026-11-06")[4].tabId)
-        assertEquals("car", MemoPlanner.itemsOn(sample(), "2026-11-06").last().tabId)
+        assertEquals("bousai", MemoPlanner.itemsOn(sample(), "2026-11-06").last().tabId)
         assertEquals(emptyList<DayItem>(), MemoPlanner.itemsOn(sample(), "2026-11-08"))
     }
 
@@ -74,11 +75,11 @@ class TaskBoardTest {
             """
             08:10 朝
             15:00 午後
-            時刻なし 日付だけ
+            車 エンジンオイル
             掃除 居間 床
             掃除 当日
+            時刻なし 日付だけ
             防災 水（1箱）
-            車 エンジンオイル
             """.trimIndent(),
             summary.body,
         )
@@ -116,7 +117,52 @@ class TaskBoardTest {
     }
 
     @Test
-    fun removedTabsAreSkippedAndCustomTabsAreNotMarked() {
+    fun postponedDateReplacesOnlyThisOccurrence() {
+        val moved = CleanEntry("c1", "居間 床", "2026-10-04", 30, shift = "2026-11-10")
+        val board = TaskBoard(cleaning = listOf(moved))
+        assertEquals(setOf("clean"), MemoPlanner.marks(board)["2026-11-10"])
+        assertEquals(null, MemoPlanner.marks(board)["2026-11-03"])
+        assertEquals(listOf("居間 床"), MemoPlanner.itemsOn(board, "2026-11-10").map { it.title })
+        assertTrue(MemoPlanner.itemsOn(board, "2026-11-10").single().shifted)
+        val afterDone = moved.copy(done = "2026-11-10", shift = null)
+        assertEquals(LocalDate.parse("2026-12-10"), MemoPlanner.nextCleanDate(afterDone.done, afterDone.cycle))
+        assertEquals(
+            LocalDate.parse("2026-12-10"),
+            MemoPlanner.shownDate(MemoPlanner.nextCleanDate(afterDone.done, afterDone.cycle), afterDone.shift),
+        )
+    }
+
+    @Test
+    fun customTabsAreMarkedAndTheMorningSummaryIncludesThem() {
+        val board = TaskBoard(
+            extras = listOf(ExtraEntry("shop", "買い物", "i1", "電池", "2026-10-18", 1, shift = "2026-11-20")),
+        )
+        assertEquals(setOf("x:shop"), MemoPlanner.marks(board)["2026-11-20"])
+        assertEquals(null, MemoPlanner.marks(board)["2026-11-18"])
+        assertEquals("買い物 電池", MemoPlanner.dailySummary(board, "2026-11-20")!!.body)
+    }
+
+    @Test
+    fun onlySwitchedOnTabsRingAndMemosStayOnByDefault() {
+        val board = parseBoard(
+            """
+            {"memos":[{"id":"m1","text":"病院","due":"2026-11-20","time":"09:30","done":null}],
+             "cleaning":[{"id":"c1","place":"居間","task":"床","done":"2026-11-20","cycle":0,"time":"08:00"}],
+             "bousai":[{"id":"b1","item":"水","due":"2026-11-20","time":"07:00"}],
+             "tabs":[{"id":"car","kind":"car","items":[{"id":"oil","name":"オイル","done":"2026-11-20","months":0,"time":"10:00"}]},
+                      {"id":"shop","kind":"custom","name":"買い物","items":[{"id":"i1","name":"電池","done":"2026-11-20","months":0,"time":"11:00"}]}],
+             "rings":{"clean":true}}
+            """.trimIndent(),
+        )
+        assertEquals(listOf("居間 床", "病院"), MemoPlanner.planAlerts(board, noon("2026-11-02")).map { it.title })
+        val memoOff = board.copy(rings = board.rings + ("memo" to false))
+        assertEquals(listOf("居間 床"), MemoPlanner.planAlerts(memoOff, noon("2026-11-02")).map { it.title })
+        val old = parseBoard("""{"memos":[{"id":"m1","text":"病院","due":"2026-11-20","time":"09:30","done":null}],"cleaning":[],"bousai":[]}""")
+        assertEquals(listOf("病院"), MemoPlanner.planAlerts(old, noon("2026-11-02")).map { it.title })
+    }
+
+    @Test
+    fun removedTabsAreSkippedAndADatedCustomTabIsKept() {
         val board = parseBoard(
             """
             {"memos":[{"id":"m1","text":"メモ","due":"2026-11-03","done":null}],
@@ -130,6 +176,7 @@ class TaskBoardTest {
             """.trimIndent(),
         )
         assertEquals(setOf("memo"), MemoPlanner.marks(board)["2026-11-03"])
+        assertEquals(setOf("x:t1"), MemoPlanner.marks(board)["2026-12-03"])
         assertEquals(listOf("メモ"), MemoPlanner.itemsOn(board, "2026-11-03").map { it.title })
         assertEquals(listOf("m1"), board.memos.map { it.id })
     }

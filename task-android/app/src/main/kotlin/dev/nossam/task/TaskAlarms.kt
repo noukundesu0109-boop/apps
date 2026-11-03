@@ -143,7 +143,7 @@ internal object TaskAlarms {
         val store = AlarmStore(context)
         val board = readBoard(store)
         val now = ZonedDateTime.now(MemoPlanner.ZONE)
-        val planned = MemoPlanner.plan(board.memos, now).toMutableList()
+        val planned = MemoPlanner.planAlerts(board, now).toMutableList()
         val snoozes = store.readSnoozes().filter { it.atMillis > System.currentTimeMillis() + 5_000L }
         store.writeSnoozes(snoozes)
         for (snooze in snoozes) {

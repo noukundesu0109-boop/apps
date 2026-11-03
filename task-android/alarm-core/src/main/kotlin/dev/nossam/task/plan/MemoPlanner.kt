@@ -100,42 +100,105 @@ object MemoPlanner {
         return LocalDate.of(year, monthIndex + 1, minOf(date.dayOfMonth, length))
     }
 
+    /** A postponed date replaces only the current occurrence. */
+    fun shownDate(natural: LocalDate?, shift: String?): LocalDate? = parseDate(shift) ?: natural
+
+    /** Memo rings unless turned off. Every other tab rings only when the setting is on. */
+    fun ringsOn(board: TaskBoard, key: String): Boolean {
+        val value = board.rings[key]
+        return if (key == KIND_MEMO) value != false else value == true
+    }
+
     /** Color keys present on each date. Kinds already removed by the user are absent from [board]. */
     fun marks(board: TaskBoard): Map<String, Set<String>> {
         val out = LinkedHashMap<String, LinkedHashSet<String>>()
-        fun add(date: String?, kind: String) {
-            if (parseDate(date) == null) return
-            out.getOrPut(date!!) { LinkedHashSet() }.add(kind)
+        fun add(date: LocalDate?, kind: String) {
+            if (date == null) return
+            out.getOrPut(date.toString()) { LinkedHashSet() }.add(kind)
         }
-        for (memo in board.memos) add(memo.due, KIND_MEMO)
-        for (item in board.cleaning) add(nextCleanDate(item.done, item.cycle)?.toString(), KIND_CLEAN)
-        for (item in board.bousai) add(item.due, KIND_BOUSAI)
-        for (item in board.cars) add(nextCarDate(item.done, item.months)?.toString(), KIND_CAR)
+        for (memo in board.memos) add(parseDate(memo.due), KIND_MEMO)
+        for (item in board.cleaning) add(shownDate(nextCleanDate(item.done, item.cycle), item.shift), KIND_CLEAN)
+        for (item in board.bousai) add(shownDate(parseDate(item.due), item.shift), KIND_BOUSAI)
+        for (item in board.cars) add(shownDate(nextCarDate(item.done, item.months), item.shift), KIND_CAR)
+        for (item in board.extras) add(shownDate(nextCarDate(item.done, item.months), item.shift), extraKind(item.tabId))
         return out
     }
 
-    /** Memos for [iso] (timed first, untimed last), then 掃除, 防災, 車. */
+    /** Every dated item on [iso], timed ones first, then untimed. */
     fun itemsOn(board: TaskBoard, iso: String): List<DayItem> {
         if (parseDate(iso) == null) return emptyList()
-        val memos = board.memos.filter { it.due == iso }.sortedWith(
-            compareBy<MemoEntry> { if (parseTime(it.time) == null) 1 else 0 }
-                .thenBy { it.time ?: "" }
-                .thenBy { it.text }
-                .thenBy { it.id },
-        ).map {
-            DayItem(KIND_MEMO, it.id, it.text, time = it.time, done = it.done)
+        val items = ArrayList<DayItem>()
+        for (memo in board.memos) {
+            if (memo.due != iso) continue
+            items += DayItem(KIND_MEMO, memo.id, memo.text, time = memo.time, done = memo.done, label = "メモ")
         }
-        val cleaning = board.cleaning.filter { nextCleanDate(it.done, it.cycle)?.toString() == iso }
-            .sortedWith(compareBy({ it.title }, { it.id }))
-            .map { DayItem(KIND_CLEAN, it.id, it.title, tabId = "clean") }
-        val bousai = board.bousai.filter { it.due == iso }
-            .sortedWith(compareBy({ it.title }, { it.id }))
-            .map { DayItem(KIND_BOUSAI, it.id, it.title, tabId = "bousai") }
-        val cars = board.cars.filter { nextCarDate(it.done, it.months)?.toString() == iso }
-            .sortedWith(compareBy({ it.title }, { it.id }))
-            .map { DayItem(KIND_CAR, it.id, it.title, tabId = it.tabId) }
-        return memos + cleaning + bousai + cars
+        for (item in board.cleaning) {
+            if (shownDate(nextCleanDate(item.done, item.cycle), item.shift)?.toString() != iso) continue
+            items += DayItem(KIND_CLEAN, item.id, item.title, time = item.time, tabId = "clean", label = "掃除", shifted = parseDate(item.shift) != null)
+        }
+        for (item in board.bousai) {
+            if (shownDate(parseDate(item.due), item.shift)?.toString() != iso) continue
+            items += DayItem(KIND_BOUSAI, item.id, item.title, time = item.time, tabId = "bousai", label = "防災", shifted = parseDate(item.shift) != null)
+        }
+        for (item in board.cars) {
+            if (shownDate(nextCarDate(item.done, item.months), item.shift)?.toString() != iso) continue
+            items += DayItem(KIND_CAR, item.id, item.title, time = item.time, tabId = item.tabId, label = "車", shifted = parseDate(item.shift) != null)
+        }
+        for (item in board.extras) {
+            if (shownDate(nextCarDate(item.done, item.months), item.shift)?.toString() != iso) continue
+            items += DayItem(extraKind(item.tabId), item.id, item.title, time = item.time, tabId = item.tabId, label = item.tabName, shifted = parseDate(item.shift) != null)
+        }
+        return items.sortedWith(
+            compareBy<DayItem> { if (parseTime(it.time) == null) 1 else 0 }
+                .thenBy { it.time ?: "" }
+                .thenBy { it.title }
+                .thenBy { it.kind }
+                .thenBy { it.id },
+        )
     }
+
+    /**
+     * Full-screen alarms. Memos ring by default. Other tabs ring only when that
+     * tab is switched on and the item has a time. The date is the postponed one
+     * when this occurrence was moved.
+     */
+    fun planAlerts(board: TaskBoard, now: ZonedDateTime): List<PlannedMemoAlarm> {
+        val memoAlarms = if (ringsOn(board, KIND_MEMO)) plan(board.memos, now) else emptyList()
+        val nowZ = now.withZoneSameInstant(ZONE)
+        val nowInstant = nowZ.toInstant()
+        val limit = nowZ.plusYears(2).toInstant()
+        val extra = ArrayList<PlannedMemoAlarm>()
+        fun add(ringKey: String, idPrefix: String, id: String, title: String, date: LocalDate?, timeText: String?) {
+            if (!ringsOn(board, ringKey)) return
+            val time = parseTime(timeText) ?: return
+            val day = date ?: return
+            val instant = day.atTime(time).atZone(ZONE).toInstant()
+            if (!instant.isAfter(nowInstant) || instant.isAfter(limit)) return
+            extra += PlannedMemoAlarm(
+                id = "$idPrefix|$id|$day|$timeText",
+                triggerAtMillis = instant.toEpochMilli(),
+                date = day.toString(),
+                time = timeText!!,
+                title = title.ifBlank { "予定" },
+                detail = "${formatJapaneseDate(day)} $timeText",
+            )
+        }
+        for (item in board.cleaning) {
+            add("clean", "c", item.id, item.title, shownDate(nextCleanDate(item.done, item.cycle), item.shift), item.time)
+        }
+        for (item in board.bousai) {
+            add("bousai", "b", item.id, item.title, shownDate(parseDate(item.due), item.shift), item.time)
+        }
+        for (item in board.cars) {
+            add(item.tabId, "t", item.id, item.title, shownDate(nextCarDate(item.done, item.months), item.shift), item.time)
+        }
+        for (item in board.extras) {
+            add(item.tabId, "t", item.id, item.title, shownDate(nextCarDate(item.done, item.months), item.shift), item.time)
+        }
+        return (memoAlarms + extra).sortedWith(compareBy({ it.triggerAtMillis }, { it.id }))
+    }
+
+    fun extraKind(tabId: String) = "x:$tabId"
 
     /** One morning notification. Done memos are omitted. Null when the day has nothing to list. */
     fun dailySummary(board: TaskBoard, iso: String): DailySummary? {
@@ -161,12 +224,12 @@ object MemoPlanner {
         return at
     }
 
-    private fun summaryLine(item: DayItem): String = when (item.kind) {
-        KIND_MEMO -> if (item.time != null) "${item.time} ${item.title}" else "時刻なし ${item.title}"
-        KIND_CLEAN -> "掃除 ${item.title}"
-        KIND_BOUSAI -> "防災 ${item.title}"
-        KIND_CAR -> "車 ${item.title}"
-        else -> item.title
+    private fun summaryLine(item: DayItem): String {
+        val prefix = when (item.kind) {
+            KIND_MEMO -> if (item.time != null) "${item.time} " else "時刻なし "
+            else -> if (item.time != null) "${item.time} ${item.label} " else "${item.label} "
+        }
+        return (prefix + item.title).trim()
     }
 
     const val KIND_MEMO = "memo"
@@ -214,6 +277,8 @@ data class TaskBoard(
     val cleaning: List<CleanEntry> = emptyList(),
     val bousai: List<BousaiEntry> = emptyList(),
     val cars: List<CarEntry> = emptyList(),
+    val extras: List<ExtraEntry> = emptyList(),
+    val rings: Map<String, Boolean> = emptyMap(),
 )
 
 data class CleanEntry(
@@ -221,12 +286,16 @@ data class CleanEntry(
     val title: String,
     val done: String?,
     val cycle: Int?,
+    val shift: String? = null,
+    val time: String? = null,
 )
 
 data class BousaiEntry(
     val id: String,
     val title: String,
     val due: String?,
+    val shift: String? = null,
+    val time: String? = null,
 )
 
 data class CarEntry(
@@ -235,6 +304,19 @@ data class CarEntry(
     val title: String,
     val done: String?,
     val months: Int?,
+    val shift: String? = null,
+    val time: String? = null,
+)
+
+data class ExtraEntry(
+    val tabId: String,
+    val tabName: String,
+    val id: String,
+    val title: String,
+    val done: String?,
+    val months: Int?,
+    val shift: String? = null,
+    val time: String? = null,
 )
 
 data class DayItem(
@@ -244,6 +326,8 @@ data class DayItem(
     val time: String? = null,
     val done: Boolean = false,
     val tabId: String? = null,
+    val label: String = "",
+    val shifted: Boolean = false,
 )
 
 data class DailySummary(
@@ -287,7 +371,14 @@ fun parseBoard(json: String): TaskBoard {
     } else {
         readCars(root.optJSONArray("tabs"))
     }
-    return TaskBoard(memos = memos, cleaning = cleaning, bousai = bousai, cars = cars)
+    return TaskBoard(
+        memos = memos,
+        cleaning = cleaning,
+        bousai = bousai,
+        cars = cars,
+        extras = readExtras(root.optJSONArray("tabs")),
+        rings = readRings(root.optJSONObject("rings")),
+    )
 }
 
 private fun readCleaning(array: JSONArray?): List<CleanEntry> {
@@ -304,6 +395,8 @@ private fun readCleaning(array: JSONArray?): List<CleanEntry> {
             title = title,
             done = done,
             cycle = jsonWholeNumber(item, "cycle"),
+            shift = item.optString("shift").takeIf { MemoPlanner.parseDate(it) != null },
+            time = item.optString("time").takeIf { MemoPlanner.parseTime(it) != null },
         )
     }
     return out
@@ -321,6 +414,8 @@ private fun readBousai(array: JSONArray?): List<BousaiEntry> {
             id = item.optString("id").ifBlank { "b$i" },
             title = title,
             due = item.optString("due").takeIf { MemoPlanner.parseDate(it) != null },
+            shift = item.optString("shift").takeIf { MemoPlanner.parseDate(it) != null },
+            time = item.optString("time").takeIf { MemoPlanner.parseTime(it) != null },
         )
     }
     return out
@@ -342,8 +437,47 @@ private fun readCars(tabs: JSONArray?): List<CarEntry> {
                 title = item.optString("name").trim().ifEmpty { "車" },
                 done = item.optString("done").takeIf { MemoPlanner.parseDate(it) != null },
                 months = jsonWholeNumber(item, "months"),
+                shift = item.optString("shift").takeIf { MemoPlanner.parseDate(it) != null },
+                time = item.optString("time").takeIf { MemoPlanner.parseTime(it) != null },
             )
         }
+    }
+    return out
+}
+
+private fun readExtras(tabs: JSONArray?): List<ExtraEntry> {
+    if (tabs == null) return emptyList()
+    val out = ArrayList<ExtraEntry>()
+    for (t in 0 until tabs.length()) {
+        val tab = tabs.optJSONObject(t) ?: continue
+        if (tab.optString("kind") == MemoPlanner.KIND_CAR) continue
+        val tabId = tab.optString("id").ifBlank { "t$t" }
+        val tabName = tab.optString("name").trim().ifEmpty { "タブ" }
+        val items = tab.optJSONArray("items") ?: continue
+        for (i in 0 until items.length()) {
+            val item = items.optJSONObject(i) ?: continue
+            out += ExtraEntry(
+                tabId = tabId,
+                tabName = tabName,
+                id = item.optString("id").ifBlank { "x$i" },
+                title = item.optString("name").trim().ifEmpty { tabName },
+                done = item.optString("done").takeIf { MemoPlanner.parseDate(it) != null },
+                months = jsonWholeNumber(item, "months"),
+                shift = item.optString("shift").takeIf { MemoPlanner.parseDate(it) != null },
+                time = item.optString("time").takeIf { MemoPlanner.parseTime(it) != null },
+            )
+        }
+    }
+    return out
+}
+
+private fun readRings(obj: JSONObject?): Map<String, Boolean> {
+    if (obj == null) return emptyMap()
+    val out = LinkedHashMap<String, Boolean>()
+    val keys = obj.keys()
+    while (keys.hasNext()) {
+        val key = keys.next()
+        if (obj.opt(key) is Boolean) out[key] = obj.getBoolean(key)
     }
     return out
 }
