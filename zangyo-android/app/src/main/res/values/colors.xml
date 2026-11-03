@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="paper">#F3EFE6</color>
+    <color name="card">#FFFDF8</color>
+    <color name="ink">#1C1917</color>
+    <color name="muted">#6F675C</color>
+    <color name="line">#E4DDD0</color>
+    <color name="forest">#1F5C45</color>
+    <color name="forest_2">#2D6A4F</color>
+    <color name="over">#B42318</color>
+</resources>
