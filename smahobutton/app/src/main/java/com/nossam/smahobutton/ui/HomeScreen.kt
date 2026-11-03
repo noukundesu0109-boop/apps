@@ -42,11 +42,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.nossam.smahobutton.MainActivity
 import com.nossam.smahobutton.backup.readBackupText
 import com.nossam.smahobutton.backup.shareBackup
-import com.nossam.smahobutton.backup.writeBackup
 import com.nossam.smahobutton.logic.BackupRead
 import com.nossam.smahobutton.logic.SettingsSpec
+import com.nossam.smahobutton.logic.backupDriveName
 import com.nossam.smahobutton.logic.backupFileName
 import com.nossam.smahobutton.logic.encodeBackup
 import com.nossam.smahobutton.logic.readBackup
@@ -58,6 +59,7 @@ import com.nossam.smahobutton.system.dndSettingsIntent
 import com.nossam.smahobutton.system.overlaySettingsIntent
 import com.nossam.smahobutton.system.readPermissions
 import com.nossam.smahobutton.system.tryStart
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 private const val RESTRICTED_HELP =
@@ -82,13 +84,6 @@ fun HomeScreen(
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { revision++ }
-    val createBackup = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json"),
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        val ok = context.writeBackup(uri, encodeBackup(settings))
-        Toast.makeText(context, if (ok) "保存しました" else "保存できませんでした", Toast.LENGTH_SHORT).show()
-    }
     val openBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val text = context.readBackupText(uri)
@@ -233,15 +228,18 @@ fun HomeScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Button(
-                    onClick = { createBackup.launch(backupFileName(LocalDateTime.now())) },
+                    onClick = {
+                        val activity = context as? MainActivity ?: return@Button
+                        activity.saveToDrive(backupDriveName(LocalDate.now()), encodeBackup(settings))
+                    },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("バックアップを保存") }
+                ) { Text("ドライブに保存") }
                 OutlinedButton(
                     onClick = {
                         context.shareBackup(encodeBackup(settings), backupFileName(LocalDateTime.now()))
                     },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("共有") }
+                ) { Text("バックアップを保存") }
                 OutlinedButton(
                     onClick = {
                         openBackup.launch(arrayOf("application/json", "text/plain", "*/*"))
@@ -267,6 +265,17 @@ fun HomeScreen(
             },
             dismissButton = {
                 TextButton(onClick = { pendingRestore = null }) { Text("やめる") }
+            },
+        )
+    }
+    val activity = context as? MainActivity
+    val driveNote = activity?.driveNotice
+    if (activity != null && driveNote != null) {
+        AlertDialog(
+            onDismissRequest = { activity.driveNotice = null },
+            text = { Text(driveNote) },
+            confirmButton = {
+                TextButton(onClick = { activity.driveNotice = null }) { Text("閉じる") }
             },
         )
     }

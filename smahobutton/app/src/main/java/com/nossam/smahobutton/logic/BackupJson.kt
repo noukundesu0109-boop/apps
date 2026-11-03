@@ -1,5 +1,6 @@
 package com.nossam.smahobutton.logic
 
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlinx.serialization.json.Json
@@ -26,8 +27,11 @@ private val backupJson = Json {
 }
 
 private val stamp = DateTimeFormatter.ofPattern("yyyyMMdd-HHmm")
+private val dayStamp = DateTimeFormatter.ofPattern("yyyyMMdd")
 
 fun backupFileName(time: LocalDateTime): String = "smahobutton-backup-${time.format(stamp)}.json"
+
+fun backupDriveName(day: LocalDate): String = "smahobutton-backup-${day.format(dayStamp)}.json"
 
 fun encodeBackup(spec: SettingsSpec): String {
     val root = JsonObject(

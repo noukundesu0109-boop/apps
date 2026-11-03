@@ -7,14 +7,6 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import java.io.File
 
-fun Context.writeBackup(uri: Uri, json: String): Boolean = try {
-    contentResolver.openOutputStream(uri)?.use { stream ->
-        stream.write(json.toByteArray(Charsets.UTF_8))
-    } != null
-} catch (_: Exception) {
-    false
-}
-
 fun Context.readBackupText(uri: Uri): String? = try {
     contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
 } catch (_: Exception) {
@@ -33,5 +25,5 @@ fun Context.shareBackup(json: String, fileName: String) {
         clipData = ClipData.newRawUri(fileName, uri)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    startActivity(Intent.createChooser(send, "控えを共有"))
+    startActivity(Intent.createChooser(send, "バックアップの保存先"))
 }
