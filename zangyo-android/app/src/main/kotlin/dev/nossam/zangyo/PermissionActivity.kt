@@ -11,9 +11,6 @@ import android.widget.Button
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
 
 class PermissionActivity : AppCompatActivity() {
     private val requestNotifications = registerForActivityResult(
@@ -22,18 +19,9 @@ class PermissionActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        prepareEdgeToEdge()
         setContentView(R.layout.activity_permissions)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowCompat.getInsetsController(window, window.decorView).apply {
-            isAppearanceLightStatusBars = true
-            isAppearanceLightNavigationBars = true
-        }
-        val root = findViewById<View>(R.id.permRoot)
-        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
-            WindowInsetsCompat.CONSUMED
-        }
+        applySafeSystemBarPadding()
         findViewById<Button>(R.id.permNotifButton).setOnClickListener { enableNotifications() }
         findViewById<Button>(R.id.permFullButton).setOnClickListener { openFullScreenSettings() }
         findViewById<Button>(R.id.permBatteryButton).setOnClickListener { openBatterySettings() }
