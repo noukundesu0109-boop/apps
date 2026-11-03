@@ -13,8 +13,8 @@ android {
         applicationId = "dev.nossam.task"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.1.1"
     }
 
     buildTypes {
@@ -75,6 +75,8 @@ val prepareWeb = tasks.register("prepareTaskWeb") {
         check(index.contains("__taskSetMemoDate")) { "memo date bridge was not injected" }
         check(index.contains("__taskOpen")) { "editor bridge was not injected" }
         check(!index.contains("`cal`,`カレンダー`")) { "separate calendar tab is still present" }
+        check(index.contains("__taskDriveDone")) { "drive save was not switched to Android sign-in" }
+        check(index.contains("新しい1件だけを残し")) { "drive keep-one text was not updated" }
         check(!index.contains("serviceWorker.register")) { "service worker registration still present" }
     }
 }
@@ -92,6 +94,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.webkit:webkit:1.12.1")
     implementation("androidx.activity:activity-ktx:1.9.3")
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
 }
 
 fun patchIndex(html: String): String {
@@ -155,6 +158,16 @@ fun patchIndex(html: String): String {
         text,
         """i===`settings`&&(0,A.jsxs)(`div`,{className:`space-y-3`,children:[(0,A.jsxs)(`div`,{className:`rounded-xl border border-line bg-card p-4`,children:""",
         """i===`settings`&&(0,A.jsxs)(`div`,{className:`space-y-3`,children:[(0,A.jsx)(`div`,{id:`task-summary-host`,className:`mb-3`}),(0,A.jsxs)(`div`,{className:`rounded-xl border border-line bg-card p-4`,children:""",
+    )
+    text = replaceOne(
+        text,
+        "pt=async()=>{if(!dt){ft(!0),x(`Googleドライブに保存しています…`);try{let e=await Je(ct(),ut(),/^tasks-backup-/);",
+        "pt=async()=>{if(!dt){if(window.TaskNative&&TaskNative.saveToDrive){ft(!0);x(`Googleドライブに保存しています…`);window.__taskDriveDone=function(raw){ft(!1);try{let e=JSON.parse(raw);if(!e.ok){x(e.message||`Googleドライブに保存できませんでした。通信状態やGoogleの許可を確認して、もう一度試してください。だめなときは「バックアップを保存」を使ってください。`);return}x(`Googleドライブの「Grok」に保存しました：`+(e.name||``)+(e.cleaned?`。古いバックアップを`+e.cleaned+`件ゴミ箱へ移しました。`:``)+(e.unverified?`（確認ができなかったため、古いバックアップは削除していません）`:e.cleanErr?`。古いバックアップの整理はできませんでした。`:``))}catch(err){x(`Googleドライブに保存できませんでした。通信状態やGoogleの許可を確認して、もう一度試してください。だめなときは「バックアップを保存」を使ってください。`)}};try{TaskNative.saveToDrive(ct(),ut())}catch(err){ft(!1);x(`Googleドライブに保存できませんでした。通信状態やGoogleの許可を確認して、もう一度試してください。だめなときは「バックアップを保存」を使ってください。`)}return}ft(!0),x(`Googleドライブに保存しています…`);try{let e=await Je(ct(),ut(),/^tasks-backup-/);",
+    )
+    text = replaceOne(
+        text,
+        "最新2件を残し、古いものはゴミ箱へ",
+        "新しい1件だけを残し、前のファイルはゴミ箱へ",
     )
     text = replaceOne(
         text,

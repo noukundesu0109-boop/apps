@@ -11,6 +11,7 @@ class ZangyoJsBridge(
 ) {
     interface Ui {
         fun shareBackup(name: String, content: String)
+        fun saveToDrive(name: String, content: String)
         fun openPermissions()
     }
 
@@ -32,6 +33,11 @@ class ZangyoJsBridge(
     fun saveBackup(name: String, content: String) {
         if (content.length > 8_000_000) return
         main.post { ui.shareBackup(name, content) }
+    }
+
+    @JavascriptInterface
+    fun saveToDrive(name: String, content: String) {
+        main.post { ui.saveToDrive(name, content) }
     }
 
     @JavascriptInterface

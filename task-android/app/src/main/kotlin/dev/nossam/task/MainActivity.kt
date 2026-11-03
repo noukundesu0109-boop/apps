@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Color
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
 import android.webkit.JsResult
@@ -16,18 +18,34 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.webkit.WebViewAssetLoader
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.Scope
+import dev.nossam.task.drive.DriveMessages
+import dev.nossam.task.drive.DriveNotice
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
     private lateinit var webView: WebView
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var guideShown = false
+    private var driveName: String? = null
+    private var driveContent: String? = null
+    private val driveBusy = AtomicBoolean(false)
+    private val drivePrefix = Regex("^tasks-backup-")
+
+    private val driveConsent = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        onDriveConsent(result.resultCode, result.data)
+    }
 
     private val fileChooser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val callback = fileCallback
@@ -182,6 +200,101 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
 
     override fun openPermissions() {
         startActivity(Intent(this, PermissionActivity::class.java))
+    }
+
+    override fun saveToDrive(name: String, content: String) {
+        if (name.isBlank() || name.length > 200 || content.length > 8_000_000) {
+            finishDrive(DriveNotice("error", DriveMessages.GENERIC))
+            return
+        }
+        if (!driveOnline()) {
+            finishDrive(DriveNotice("offline", DriveMessages.OFFLINE))
+            return
+        }
+        if (!driveBusy.compareAndSet(false, true)) return
+        driveName = name
+        driveContent = content
+        val request = AuthorizationRequest.builder()
+            .setRequestedScopes(listOf(Scope(DriveMessages.SCOPE)))
+            .build()
+        Identity.getAuthorizationClient(this)
+            .authorize(request)
+            .addOnSuccessListener(this) { auth ->
+                if (auth.hasResolution()) {
+                    val pending = auth.pendingIntent
+                    if (pending == null) {
+                        finishDrive(DriveMessages.noticeForStatus(-1))
+                    } else {
+                        try {
+                            driveConsent.launch(IntentSenderRequest.Builder(pending).build())
+                        } catch (_: Exception) {
+                            finishDrive(DriveMessages.noticeForStatus(-1))
+                        }
+                    }
+                } else {
+                    val token = auth.accessToken
+                    if (token.isNullOrBlank()) finishDrive(DriveMessages.noticeForStatus(-1))
+                    else uploadDrive(token)
+                }
+            }
+            .addOnFailureListener(this) { error ->
+                val code = (error as? ApiException)?.statusCode ?: -1
+                finishDrive(DriveMessages.noticeForStatus(code))
+            }
+    }
+
+    private fun onDriveConsent(resultCode: Int, data: Intent?) {
+        if (resultCode != RESULT_OK || data == null) {
+            finishDrive(DriveNotice("cancel", DriveMessages.CANCEL))
+            return
+        }
+        try {
+            val auth = Identity.getAuthorizationClient(this).getAuthorizationResultFromIntent(data)
+            val token = auth.accessToken
+            if (token.isNullOrBlank()) finishDrive(DriveMessages.noticeForStatus(-1))
+            else uploadDrive(token)
+        } catch (error: ApiException) {
+            finishDrive(DriveMessages.noticeForStatus(error.statusCode))
+        }
+    }
+
+    private fun uploadDrive(token: String) {
+        val name = driveName
+        val content = driveContent
+        if (name == null || content == null) {
+            finishDrive(DriveMessages.noticeForStatus(-1))
+            return
+        }
+        Thread {
+            val json = try {
+                DriveClient.save(token, name, content, drivePrefix).toString()
+            } catch (error: DriveFailure) {
+                JSONObject().put("ok", false).put("reason", error.notice.reason).put("message", error.notice.message).toString()
+            } catch (_: Exception) {
+                JSONObject().put("ok", false).put("reason", "error").put("message", DriveMessages.GENERIC).toString()
+            }
+            runOnUiThread {
+                driveBusy.set(false)
+                deliver("window.__taskDriveDone", json)
+            }
+        }.start()
+    }
+
+    private fun finishDrive(notice: DriveNotice) {
+        driveBusy.set(false)
+        val json = JSONObject()
+            .put("ok", false)
+            .put("reason", notice.reason)
+            .put("message", notice.message)
+            .toString()
+        deliver("window.__taskDriveDone", json)
+    }
+
+    private fun driveOnline(): Boolean {
+        val manager = getSystemService(ConnectivityManager::class.java) ?: return true
+        val network = manager.activeNetwork ?: return false
+        val caps = manager.getNetworkCapabilities(network) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     private fun deliver(functionName: String, json: String) {
