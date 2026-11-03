@@ -16,12 +16,16 @@
       { label: "目覚まし", time: "14:30" },
       { label: "移動", time: "16:47" },
       { label: "休憩", time: "21:59" }
-    ]
+    ],
+    off: [],
+    leave: []
   };
   var KINDS = [
     ["early", "早出の昼勤"],
     ["day", "通常の昼勤"],
-    ["night", "夜勤"]
+    ["night", "夜勤"],
+    ["off", "休み"],
+    ["leave", "年休"]
   ];
   var TABS = [
     ["shift", "勤務", "cal"],
@@ -71,7 +75,12 @@
     ".za-ok{background:#e7f1eb;color:#1f5c45;border-radius:10px;padding:10px 12px;font-size:14px;margin:0 0 12px}",
     ".za-msg{min-height:1.2em;color:#b42318;font-size:14px;margin:8px 0 0}",
     "label.za-field{display:block;margin:10px 0;font-size:14px;color:#6f675c}",
-    "label.za-field .za-input{margin-top:4px}"
+    "label.za-field .za-input{margin-top:4px}",
+    ".za-on{display:flex;align-items:center;gap:4px;font-size:13px;color:#6f675c;min-width:52px}",
+    ".za-on input{width:18px;height:18px}",
+    ".za-overdot{position:absolute;right:3px;top:3px;width:7px;height:7px;border-radius:50%;background:#1f5c45}",
+    "#za-day-alarm{margin-top:14px}",
+    "#za-day-alarm h3{margin:0 0 8px;font-size:14px}"
   ].join("");
   document.head.appendChild(style);
 
@@ -167,7 +176,7 @@
     }).join("");
     var days = schedule.horizonDays || 21;
     return '<ul class="za-next">' + rows + "</ul>" +
-      '<p class="za-muted">勤務のアラームは今から' + days + "日分です。解除した予定は灰色のまま残ります。「戻す」で再び鳴ります。その日の勤務の種類（早出・昼勤・夜勤・休日・年休）を変えると、その日の解除は消えて、新しい勤務のアラームが入ります。</p>";
+      '<p class="za-muted">勤務のアラームは今から' + days + "日分です。オフの時刻は鳴りません。解除した予定は灰色のまま残ります。「戻す」で再び鳴ります。その日の勤務の種類を変えると、その日の解除は消えます。この日だけのアラームを入れた日は、その時刻が優先されます。</p>";
   }
 
   function refreshBits() {
@@ -186,23 +195,31 @@
     refreshBits();
   };
 
+  function copyDefaults(key) {
+    return (DEFAULTS[key] || []).map(function (row) { return { label: row.label, time: row.time, enabled: true }; });
+  }
+
   function blankAlarms() {
     var alarms = {};
-    KINDS.forEach(function (kind) {
-      alarms[kind[0]] = DEFAULTS[kind[0]].map(function (row) { return { label: row.label, time: row.time }; });
-    });
+    KINDS.forEach(function (kind) { alarms[kind[0]] = copyDefaults(kind[0]); });
     return alarms;
+  }
+
+  function rowFrom(row) {
+    var time = row && /^\d{2}:\d{2}$/.test(row.time) ? row.time : "";
+    return {
+      label: row && row.label != null ? String(row.label) : "",
+      time: time,
+      enabled: !(row && row.enabled === false)
+    };
   }
 
   function normalizeAlarms(raw) {
     var alarms = raw ? JSON.parse(JSON.stringify(raw)) : blankAlarms();
     KINDS.forEach(function (kind) {
       var key = kind[0];
-      if (!Array.isArray(alarms[key])) alarms[key] = DEFAULTS[key].map(function (row) { return { label: row.label, time: row.time }; });
-      alarms[key] = alarms[key].map(function (row) {
-        var time = row && /^\d{2}:\d{2}$/.test(row.time) ? row.time : "";
-        return { label: row && row.label != null ? String(row.label) : "", time: time };
-      });
+      if (!Array.isArray(alarms[key])) alarms[key] = copyDefaults(key);
+      else alarms[key] = alarms[key].map(rowFrom);
     });
     return alarms;
   }
@@ -228,7 +245,8 @@
       var key = kind[0];
       var rows = alarmDraft[key].map(function (row, index) {
         return '<div class="za-row">' +
-          '<input class="za-input za-grow" data-kind="' + key + '" data-i="' + index + '" data-field="label" value="' + esc(row.label) + '" placeholder="名前" aria-label="' + esc(kind[1]) + 'の名前">' +
+          '<label class="za-on"><input type="checkbox" data-kind="' + key + '" data-i="' + index + '" data-field="enabled"' + (row.enabled === false ? "" : " checked") + ">オン</label>" +
+          '<input class="za-input za-grow" data-kind="' + key + '" data-i="' + index + '" data-field="label" value="' + esc(row.label) + '" placeholder="名前（なくても可）" aria-label="' + esc(kind[1]) + 'の名前">' +
           '<input class="za-input za-time" type="time" step="60" data-kind="' + key + '" data-i="' + index + '" data-field="time" value="' + esc(row.time) + '" aria-label="' + esc(kind[1]) + 'の時刻">' +
           '<button type="button" class="za-del" data-act="del" data-kind="' + key + '" data-i="' + index + '">削除</button>' +
           "</div>";
@@ -245,9 +263,10 @@
     if (!alarmDraft) loadAlarms();
     panel.innerHTML =
       "<h1>アラーム</h1>" +
-      '<p class="za-lead">勤務カレンダーの昼勤・夜勤の日に、下の時刻で鳴ります。休日と年休の日は鳴りません。ロック中でも画面いっぱいに出て、5分後にもう一度鳴らせます。時刻は、その勤務と同じ日です。</p>' +
+      '<p class="za-lead">勤務の種類ごとに、鳴る時刻をいくつでも入れられます。名前は空でも大丈夫です。オフにした時刻は鳴りません。休みと年休は、最初は空です。ロック中でも画面いっぱいに出て、5分後にもう一度鳴らせます。</p>' +
       '<div id="za-perm"></div>' +
       '<section class="za-card"><h2>次に鳴る</h2><div id="za-next"></div></section>' +
+      "<h2>アラームの設定</h2>" +
       '<div id="za-form"></div>' +
       '<button type="button" class="za-btn block" data-act="perm">スマホの許可を確認</button>';
     fillForm();
@@ -260,7 +279,8 @@
     var alarms = alarmDraft || blankAlarms();
     var row = alarms[target.dataset.kind] && alarms[target.dataset.kind][Number(target.dataset.i)];
     if (!row) return;
-    row[target.dataset.field] = target.value;
+    if (target.dataset.field === "enabled") row.enabled = !!target.checked;
+    else row[target.dataset.field] = target.value;
     commitAlarms(alarms);
   });
 
@@ -282,12 +302,129 @@
       var alarms = alarmDraft ? JSON.parse(JSON.stringify(alarmDraft)) : blankAlarms();
       var key = target.dataset.kind;
       if (!Array.isArray(alarms[key])) alarms[key] = [];
-      if (act === "add") alarms[key].push({ label: "アラーム", time: "00:00" });
+      if (act === "add") alarms[key].push({ label: "", time: "00:00", enabled: true });
       if (act === "del") alarms[key].splice(Number(target.dataset.i), 1);
-      if (act === "reset") alarms[key] = DEFAULTS[key].map(function (row) { return { label: row.label, time: row.time }; });
+      if (act === "reset") alarms[key] = copyDefaults(key);
       commitAlarms(alarms);
     }
   });
+
+  function stateNow() {
+    return typeof window.__zangyoGet === "function" ? window.__zangyoGet() : null;
+  }
+
+  function writeDayOverride(iso, value) {
+    if (typeof window.__zangyoSet !== "function") return;
+    window.__zangyoSet(function (state) {
+      var dayAlarms = Object.assign({}, state.dayAlarms || {});
+      if (!value) delete dayAlarms[iso];
+      else dayAlarms[iso] = value;
+      return Object.assign({}, state, { dayAlarms: dayAlarms });
+    });
+  }
+
+  function renderDayAlarm() {
+    var host = document.getElementById("za-day-alarm");
+    if (!host) return;
+    var iso = host.getAttribute("data-day");
+    if (!iso) return;
+    var data = stateNow() || {};
+    var current = data.dayAlarms && data.dayAlarms[iso];
+    var body = "";
+    if (current && current.mute) {
+      body = '<p class="za-muted">この日は鳴りません。</p>' +
+        '<button type="button" class="za-btn" data-day-act="clear" data-day="' + esc(iso) + '">いつもの時刻に戻す</button>';
+    } else if (current && Array.isArray(current.times) && current.times.length) {
+      body = current.times.map(function (row, index) {
+        return '<div class="za-row">' +
+          '<label class="za-on"><input type="checkbox" data-day-field="enabled" data-day="' + esc(iso) + '" data-i="' + index + '"' + (row.enabled === false ? "" : " checked") + ">オン</label>" +
+          '<input class="za-input za-grow" data-day-field="label" data-day="' + esc(iso) + '" data-i="' + index + '" value="' + esc(row.label || "") + '" placeholder="名前（なくても可）">' +
+          '<input class="za-input za-time" type="time" step="60" data-day-field="time" data-day="' + esc(iso) + '" data-i="' + index + '" value="' + esc(row.time || "") + '">' +
+          '<button type="button" class="za-del" data-day-act="del" data-day="' + esc(iso) + '" data-i="' + index + '">削除</button>' +
+          "</div>";
+      }).join("") +
+        '<div class="za-actions">' +
+        '<button type="button" class="za-btn" data-day-act="add" data-day="' + esc(iso) + '">時刻を追加</button>' +
+        '<button type="button" class="za-btn" data-day-act="clear" data-day="' + esc(iso) + '">いつもの時刻に戻す</button>' +
+        "</div>";
+    } else {
+      body = '<p class="za-muted">この日は、勤務の種類の時刻が鳴ります。</p>' +
+        '<div class="za-actions">' +
+        '<button type="button" class="za-btn" data-day-act="add" data-day="' + esc(iso) + '">この日だけのアラーム</button>' +
+        '<button type="button" class="za-btn" data-day-act="mute" data-day="' + esc(iso) + '">この日は鳴らさない</button>' +
+        "</div>";
+    }
+    var html = '<section class="za-card"><h3>この日だけのアラーム</h3>' + body + "</section>";
+    if (host.getAttribute("data-sig") === iso + html) return;
+    host.setAttribute("data-sig", iso + html);
+    host.innerHTML = html;
+  }
+
+  function markCalendar() {
+    var data = stateNow() || {};
+    var overrides = data.dayAlarms || {};
+    Array.prototype.forEach.call(document.querySelectorAll("[data-cal]"), function (button) {
+      var iso = button.getAttribute("data-cal");
+      var on = !!(overrides[iso] && (overrides[iso].mute || (overrides[iso].times && overrides[iso].times.length)));
+      var dot = button.querySelector(".za-overdot");
+      if (on && !dot) {
+        dot = document.createElement("span");
+        dot.className = "za-overdot";
+        dot.setAttribute("data-daymark", iso);
+        button.appendChild(dot);
+      } else if (!on && dot) {
+        dot.remove();
+      }
+    });
+  }
+
+  function timesOf(iso) {
+    var data = stateNow() || {};
+    var current = data.dayAlarms && data.dayAlarms[iso];
+    var times = current && Array.isArray(current.times) ? current.times.map(rowFrom) : [];
+    return times;
+  }
+
+  document.addEventListener("click", function (event) {
+    var target = event.target.closest && event.target.closest("[data-day-act]");
+    if (!target) return;
+    var iso = target.getAttribute("data-day");
+    var act = target.getAttribute("data-day-act");
+    if (act === "clear") writeDayOverride(iso, null);
+    if (act === "mute") writeDayOverride(iso, { mute: true, times: [] });
+    if (act === "add") {
+      var times = timesOf(iso);
+      times.push({ label: "", time: "07:00", enabled: true });
+      writeDayOverride(iso, { mute: false, times: times });
+    }
+    if (act === "del") {
+      var next = timesOf(iso);
+      next.splice(Number(target.getAttribute("data-i")), 1);
+      writeDayOverride(iso, next.length ? { mute: false, times: next } : null);
+    }
+    setTimeout(function () { renderDayAlarm(); markCalendar(); }, 0);
+  }, true);
+
+  document.addEventListener("change", function (event) {
+    var target = event.target;
+    if (!target || !target.getAttribute || !target.getAttribute("data-day-field")) return;
+    var iso = target.getAttribute("data-day");
+    var times = timesOf(iso);
+    var row = times[Number(target.getAttribute("data-i"))];
+    if (!row) return;
+    if (target.getAttribute("data-day-field") === "enabled") row.enabled = !!target.checked;
+    else row[target.getAttribute("data-day-field")] = target.value;
+    writeDayOverride(iso, { mute: false, times: times });
+    markCalendar();
+  });
+
+  var appRoot = document.getElementById("root");
+  if (appRoot) {
+    new MutationObserver(function () {
+      markCalendar();
+      renderDayAlarm();
+    }).observe(appRoot, { childList: true, subtree: true });
+  }
 
   setActive("shift");
 })();

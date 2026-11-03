@@ -59,7 +59,7 @@ class AlarmPlannerTest {
                 "2026-11-08" to "day",
             ),
         )
-        assertNull(AlarmPlanner.alarmKind(data, "2026-11-06"))
+        assertEquals("off", AlarmPlanner.alarmKind(data, "2026-11-06"))
         assertNull(AlarmPlanner.alarmKind(data, "2026-11-07"))
         val plan = AlarmPlanner.plan(data, noon("2026-11-05"), horizonDays = 4)
         assertEquals(listOf("2026-11-08"), plan.map { it.date }.distinct())
@@ -76,8 +76,8 @@ class AlarmPlannerTest {
             early = setOf("2026-11-07"),
             leave = setOf("2026-11-07", "2026-11-08"),
         )
-        assertNull(AlarmPlanner.alarmKind(data, "2026-11-07"))
-        assertNull(AlarmPlanner.alarmKind(data, "2026-11-08"))
+        assertEquals("leave", AlarmPlanner.alarmKind(data, "2026-11-07"))
+        assertEquals("leave", AlarmPlanner.alarmKind(data, "2026-11-08"))
         assertEquals("day", AlarmPlanner.alarmKind(data, "2026-11-09"))
         val plan = AlarmPlanner.plan(data, noon("2026-11-06"), horizonDays = 5)
         assertTrue(plan.all { it.date == "2026-11-09" && it.source == "day" })
@@ -93,7 +93,7 @@ class AlarmPlannerTest {
             early = setOf("2026-11-10", "2026-11-11"),
         )
         assertEquals("night", AlarmPlanner.alarmKind(data, "2026-11-10"))
-        assertNull(AlarmPlanner.alarmKind(data, "2026-11-11"))
+        assertEquals("off", AlarmPlanner.alarmKind(data, "2026-11-11"))
         val plan = AlarmPlanner.plan(data, noon("2026-11-09"), horizonDays = 4)
         assertEquals(listOf("14:30", "16:47", "21:59"), plan.map { it.time })
     }
@@ -289,6 +289,77 @@ class AlarmPlannerTest {
         assertEquals(listOf("02:15", "04:35", "06:07", "11:18"), alarms.getValue("day").map { it.time })
         assertEquals(listOf("14:30", "16:47", "21:59"), alarms.getValue("night").map { it.time })
         assertEquals(listOf("目覚まし", "移動", "休憩"), alarms.getValue("night").map { it.label })
+        assertTrue(alarms.getValue("off").isEmpty())
+        assertTrue(alarms.getValue("leave").isEmpty())
+        assertTrue(alarms.getValue("day").all { it.enabled })
+    }
+
+    @Test
+    fun switchedOffTimesDoNotRing() {
+        val data = work(
+            shifts = mapOf("2026-11-03" to "day"),
+            alarms = mapOf(
+                "day" to listOf(
+                    AlarmRow("起床", "03:00", enabled = false),
+                    AlarmRow("出勤", "06:00", enabled = true),
+                ),
+                "early" to emptyList(),
+                "night" to emptyList(),
+                "off" to emptyList(),
+                "leave" to emptyList(),
+            ),
+        )
+        val plan = AlarmPlanner.plan(data, noon("2026-11-02"), horizonDays = 3)
+        assertEquals(listOf("06:00"), plan.map { it.time })
+    }
+
+    @Test
+    fun leaveAndOffRingOnlyWhenTheUserAddsTimes() {
+        val data = parseWorkData(
+            """
+            {"shifts":{"2026-11-06":"off","2026-11-08":"day"},
+             "leave":["2026-11-07"],
+             "alarms":{"off":[{"label":"見回り","time":"09:00"}],"leave":[{"label":"連絡","time":"10:00","enabled":true}]}}
+            """.trimIndent(),
+        )
+        val plan = AlarmPlanner.plan(data, noon("2026-11-05"), horizonDays = 5)
+        assertEquals(listOf("2026-11-06", "2026-11-07", "2026-11-08"), plan.map { it.date }.distinct())
+        assertEquals("off", plan.first { it.date == "2026-11-06" }.source)
+        assertEquals("leave", plan.first { it.date == "2026-11-07" }.source)
+    }
+
+    @Test
+    fun dayOverrideReplacesUsualTimesOrSilencesTheDay() {
+        val usual = work(shifts = mapOf("2026-11-03" to "day", "2026-11-04" to "day"))
+        val overridden = usual.copy(
+            dayAlarms = mapOf(
+                "2026-11-03" to DayOverride(
+                    mute = false,
+                    times = listOf(AlarmRow("起床", "03:30"), AlarmRow("切", "04:00", enabled = false)),
+                ),
+                "2026-11-04" to DayOverride(mute = true),
+            ),
+        )
+        val plan = AlarmPlanner.plan(overridden, noon("2026-11-02"), horizonDays = 4)
+        assertEquals(listOf("03:30"), plan.map { it.time })
+        assertEquals("override", plan.single().source)
+        assertEquals("11月3日（火） この日だけ", plan.single().detail)
+        assertNull(AlarmPlanner.alarmKind(overridden, "2026-11-04"))
+    }
+
+    @Test
+    fun olderBackupWithoutNewSettingsKeepsTheDefaultTimes() {
+        val data = parseWorkData(
+            """
+            {"shifts":{"2026-11-03":"day","2026-11-06":"off"},"leave":["2026-11-07"],"early":[]}
+            """.trimIndent(),
+        )
+        assertEquals("02:15", data.alarms.getValue("day").first().time)
+        assertTrue(data.alarms.getValue("off").isEmpty())
+        assertTrue(data.alarms.getValue("leave").isEmpty())
+        assertTrue(data.dayAlarms.isEmpty())
+        val plan = AlarmPlanner.plan(data, noon("2026-11-02"), horizonDays = 7)
+        assertEquals(listOf("2026-11-03"), plan.map { it.date }.distinct())
     }
 
     private fun noon(iso: String): ZonedDateTime {

@@ -12,20 +12,23 @@ import java.time.format.DateTimeParseException
 /**
  * Decides which alarms ring for the 就業 calendar.
  *
- * [alarmKind] is the rule that used to live in the web app:
- * leave (年休) and non-work days (no shift, or 休日 / off) produce none;
- * a day shift with the early flag uses the early set; night uses the night set.
- * Every time is on the same calendar day as the shift, in Asia/Tokyo.
+ * A day shift with the early flag uses the early set; night uses the night set.
+ * 休み (off) and 年休 (leave) use their own sets, which start empty.
+ * A per-day override replaces that day's usual times, or silences the day.
+ * Every time is on the same calendar day, in Asia/Tokyo.
  */
 object AlarmPlanner {
     val ZONE: ZoneId = ZoneId.of("Asia/Tokyo")
     const val DEFAULT_HORIZON_DAYS = 21
     const val SNOOZE_MINUTES = 5
 
-    val KIND_LABELS = mapOf(
+    val KIND_LABELS = linkedMapOf(
         "early" to "早出の昼勤",
         "day" to "通常の昼勤",
         "night" to "夜勤",
+        "off" to "休み",
+        "leave" to "年休",
+        "override" to "この日だけ",
     )
 
     fun defaultAlarms(): Map<String, List<AlarmRow>> = mapOf(
@@ -46,13 +49,21 @@ object AlarmPlanner {
             AlarmRow("移動", "16:47"),
             AlarmRow("休憩", "21:59"),
         ),
+        "off" to emptyList(),
+        "leave" to emptyList(),
     )
 
     fun alarmKind(data: WorkData, iso: String): String? {
-        if (iso in data.leave) return null
+        val override = data.dayAlarms[iso]
+        if (override != null) {
+            if (override.mute) return null
+            if (override.times.isNotEmpty()) return "override"
+        }
+        if (iso in data.leave) return "leave"
         return when (data.shifts[iso]) {
             "night" -> "night"
             "day" -> if (iso in data.early) "early" else "day"
+            "off" -> "off"
             else -> null
         }
     }
@@ -77,7 +88,9 @@ object AlarmPlanner {
             val iso = date.toString()
             val kind = alarmKind(data, iso)
             if (kind != null) {
-                data.alarms[kind].orEmpty().forEachIndexed { index, row ->
+                val rows = if (kind == "override") data.dayAlarms[iso]?.times.orEmpty() else data.alarms[kind].orEmpty()
+                rows.forEachIndexed { index, row ->
+                    if (!row.enabled) return@forEachIndexed
                     val time = parseTime(row.time) ?: return@forEachIndexed
                     val whenAt = date.atTime(time).atZone(ZONE)
                     if (!whenAt.toInstant().isAfter(nowInstant)) return@forEachIndexed
@@ -129,13 +142,16 @@ object AlarmPlanner {
     }
 }
 
-data class AlarmRow(val label: String, val time: String)
+data class AlarmRow(val label: String, val time: String, val enabled: Boolean = true)
+
+data class DayOverride(val mute: Boolean, val times: List<AlarmRow> = emptyList())
 
 data class WorkData(
     val shifts: Map<String, String>,
     val early: Set<String>,
     val leave: Set<String>,
     val alarms: Map<String, List<AlarmRow>>,
+    val dayAlarms: Map<String, DayOverride> = emptyMap(),
 )
 
 data class PlannedAlarm(
@@ -170,13 +186,14 @@ fun parseWorkData(json: String): WorkData {
         early = readDates(root.opt("early")),
         leave = readDates(root.opt("leave")),
         alarms = readAlarms(root.opt("alarms")),
+        dayAlarms = readDayAlarms(root.optJSONObject("dayAlarms")),
     )
 }
 
 private fun readAlarms(raw: Any?): Map<String, List<AlarmRow>> {
     val defaults = AlarmPlanner.defaultAlarms()
     if (raw !is JSONObject) return defaults
-    return AlarmPlanner.KIND_LABELS.keys.associateWith { kind ->
+    return AlarmPlanner.defaultAlarms().keys.associateWith { kind ->
         val value = raw.opt(kind)
         if (value is JSONArray) parseRows(value) else defaults.getValue(kind)
     }
@@ -187,12 +204,32 @@ private fun parseRows(array: JSONArray): List<AlarmRow> {
     for (i in 0 until array.length()) {
         val item = array.optJSONObject(i) ?: continue
         val time = item.optString("time")
+        val enabled = if (item.has("enabled") && item.opt("enabled") is Boolean) item.getBoolean("enabled") else true
         rows += AlarmRow(
             label = item.optString("label"),
             time = if (TIME.matches(time)) time else "",
+            enabled = enabled,
         )
     }
     return rows
+}
+
+private fun readDayAlarms(raw: JSONObject?): Map<String, DayOverride> {
+    if (raw == null) return emptyMap()
+    val out = linkedMapOf<String, DayOverride>()
+    val keys = raw.keys()
+    while (keys.hasNext()) {
+        val key = keys.next()
+        if (!isIsoDate(key)) continue
+        val item = raw.optJSONObject(key) ?: continue
+        if (item.optBoolean("mute", false)) {
+            out[key] = DayOverride(mute = true)
+            continue
+        }
+        val times = item.optJSONArray("times")?.let { parseRows(it) }.orEmpty()
+        if (times.isNotEmpty()) out[key] = DayOverride(mute = false, times = times)
+    }
+    return out
 }
 
 private fun readDates(raw: Any?): Set<String> {

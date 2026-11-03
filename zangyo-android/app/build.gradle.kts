@@ -13,8 +13,8 @@ android {
         applicationId = "dev.nossam.zangyo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.0.5"
+        versionCode = 7
+        versionName = "1.0.6"
     }
 
     buildTypes {
@@ -69,6 +69,9 @@ val prepareWeb = tasks.register("prepareZangyoWeb") {
         val index = File(out, "index.html").readText()
         check(index.contains("android-bridge.js")) { "bridge script was not injected" }
         check(index.contains("ZangyoNative.onState")) { "state hook was not injected" }
+        check(index.contains("za-day-alarm")) { "per-day alarm host was not injected" }
+        check(index.contains("dayAlarms:da")) { "day alarm backup field was not kept" }
+        check(index.contains("enabled:e.enabled===!1")) { "alarm on/off was not kept" }
         check(index.contains("__zangyoDriveDone")) { "drive save was not switched to Android sign-in" }
         check(index.contains("新しい1件だけを残し")) { "drive keep-one text was not updated" }
         check(!index.contains("serviceWorker.register")) { "service worker registration still present" }
@@ -122,6 +125,21 @@ fun patchIndex(html: String): String {
         text,
         "データはこのブラウザにだけ残ります。月に1回はバックアップを保存してください。",
         "データはこのアプリの中だけに残ります。月に1回はバックアップを保存してください。鳴る時刻は「アラーム」です。",
+    )
+    text = replaceOne(
+        text,
+        """dt=e=>{let t={};for(let[n]of ut)t[n]=e&&typeof e==`object`&&Array.isArray(e[n])?e[n].filter(e=>e&&typeof e==`object`).map(e=>({label:String(e.label??``),time:/^\d{2}:\d{2}$/.test(e.time)?e.time:``})):nt(lt[n]);return t}""",
+        """dt=e=>{let t={},keys=[`early`,`day`,`night`,`off`,`leave`];for(let n of keys){let fallback=n===`off`||n===`leave`?[]:nt(lt[n]).map(e=>({...e,enabled:!0}));t[n]=e&&typeof e==`object`&&Array.isArray(e[n])?e[n].filter(e=>e&&typeof e==`object`).map(e=>({label:String(e.label??``),time:/^\d{2}:\d{2}$/.test(e.time)?e.time:``,enabled:e.enabled===!1?!1:!0})):fallback}return t}""",
+    )
+    text = replaceOne(
+        text,
+        """mt=e=>{let t=pt(e);return{...t,early:ft(t.early).filter(e=>t.shifts[e]===`day`),alarms:dt(t.alarms)}}""",
+        """mt=e=>{let t=pt(e),da={};if(t.dayAlarms&&typeof t.dayAlarms==`object`&&!Array.isArray(t.dayAlarms))for(let k of Object.keys(t.dayAlarms)){if(!ct.test(k))continue;let v=t.dayAlarms[k];if(!v||typeof v!=`object`)continue;if(v.mute){da[k]={mute:!0,times:[]};continue}let times=Array.isArray(v.times)?v.times.filter(e=>e&&typeof e==`object`).map(e=>({label:String(e.label??``),time:/^\d{2}:\d{2}$/.test(e.time)?e.time:``,enabled:e.enabled===!1?!1:!0})):[] ;if(times.length)da[k]={mute:!1,times}}return{...t,early:ft(t.early).filter(e=>t.shifts[e]===`day`),alarms:dt(t.alarms),dayAlarms:da}}""",
+    )
+    text = replaceOne(
+        text,
+        """(0,A.jsx)(`p`,{className:`mt-4 mb-1 text-sm font-semibold`,children:`時間の記録`}),""",
+        """(0,A.jsx)(`div`,{id:`za-day-alarm`,"data-day":x}),(0,A.jsx)(`p`,{className:`mt-4 mb-1 text-sm font-semibold`,children:`時間の記録`}),""",
     )
     text = moveLeaveSettings(text)
     return text
