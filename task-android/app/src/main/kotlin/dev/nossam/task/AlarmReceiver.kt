@@ -14,8 +14,12 @@ internal class AlarmReceiver : BroadcastReceiver() {
         val title = intent.getStringExtra(AlarmIntents.EXTRA_TITLE)
         val detail = intent.getStringExtra(AlarmIntents.EXTRA_DETAIL)
         val source = intent.getStringExtra(AlarmIntents.EXTRA_SOURCE)
+        val date = intent.getStringExtra(AlarmIntents.EXTRA_DATE)
         Thread {
             try {
+                if (action == AlarmIntents.ACTION_SUMMARY) {
+                    TaskAlarms.showSummary(app, date)
+                }
                 TaskAlarms.reschedule(app)
                 if (action == AlarmIntents.ACTION_FIRE) {
                     val service = Intent(app, AlarmRingService::class.java).setAction(AlarmIntents.ACTION_FIRE).apply {

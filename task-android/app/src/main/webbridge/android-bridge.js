@@ -1,110 +1,298 @@
 (function () {
-  var cursor = tokyoMonth(new Date());
-  var selected = tokyoToday();
+  var today = tokyoIso(new Date());
+  var cursor = today.slice(0, 7);
+  var selected = today;
   var dirty = true;
 
   var style = document.createElement("style");
   style.textContent = [
-    "#task-cal-root{color:#1c1917}",
-    ".tc-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px}",
+    "#task-cal-host{color:#1c1917}",
+    ".tc-card{background:#fffdf8;border:1px solid #e4ddd0;border-radius:12px;padding:12px}",
+    ".tc-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px}",
     ".tc-head h2{margin:0;font-size:18px}",
-    ".tc-head button{border:1px solid #e4ddd0;background:#fffdf8;border-radius:8px;min-width:44px;min-height:40px;font-size:18px}",
-    ".tc-week,.tc-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}",
+    ".tc-head button{border:1px solid #e4ddd0;background:#fffdf8;border-radius:8px;min-width:44px;min-height:40px;font-size:18px;color:#1c1917}",
+    ".tc-week,.tc-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center}",
     ".tc-week{color:#6f675c;font-size:12px;margin-bottom:4px}",
-    ".tc-day{position:relative;border:0;background:#fffdf8;border-radius:10px;min-height:46px;font-size:15px;color:#1c1917}",
-    ".tc-day.on{outline:2px solid #1f5c45}",
-    ".tc-day.mark::after{content:'';position:absolute;left:50%;bottom:6px;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:#1f5c45}",
+    ".tc-day{position:relative;border:0;background:#f7f3ea;border-radius:10px;min-height:44px;padding:4px 0 12px;font-size:14px;color:#1c1917}",
+    ".tc-day.on{outline:2px solid #1f5c45;background:#fffdf8}",
+    ".tc-day.today{font-weight:700}",
     ".tc-day.out{visibility:hidden}",
-    ".tc-list{list-style:none;margin:12px 0 0;padding:0}",
-    ".tc-list li{background:#fffdf8;border:1px solid #e4ddd0;border-radius:10px;padding:10px 12px;margin:0 0 8px;display:flex;gap:8px;align-items:baseline}",
-    ".tc-list b{font-variant-numeric:tabular-nums}",
-    ".tc-list .done{color:#6f675c;text-decoration:line-through}",
-    ".tc-note{color:#6f675c;font-size:13px;line-height:1.5;margin:8px 0 0}"
+    ".tc-dots{position:absolute;left:0;right:0;bottom:4px;display:flex;justify-content:center;gap:2px;height:6px}",
+    ".tc-dots i{width:6px;height:6px;border-radius:50%;display:block}",
+    ".tc-dots .memo{background:#1f5c45}",
+    ".tc-dots .clean{background:#9a6700}",
+    ".tc-dots .bousai{background:#b42318}",
+    ".tc-dots .car{background:#3d4f66}",
+    ".tc-legend{display:flex;flex-wrap:wrap;gap:8px 12px;margin:8px 0 0;color:#6f675c;font-size:12px}",
+    ".tc-legend span{display:inline-flex;align-items:center;gap:4px}",
+    ".tc-legend i{width:8px;height:8px;border-radius:50%;display:block}",
+    ".tc-legend .memo{background:#1f5c45}",
+    ".tc-legend .clean{background:#9a6700}",
+    ".tc-legend .bousai{background:#b42318}",
+    ".tc-legend .car{background:#3d4f66}",
+    ".tc-dayhead{margin:12px 0 0;font-size:15px}",
+    ".tc-list{list-style:none;margin:8px 0 0;padding:0}",
+    ".tc-list li,.tc-list button{background:#fffdf8;border:1px solid #e4ddd0;border-radius:10px;padding:10px 12px;margin:0 0 8px;display:flex;gap:8px;align-items:center;width:100%;text-align:left;font-size:14px;color:#1c1917}",
+    ".tc-list b{font-variant-numeric:tabular-nums;min-width:4.5em}",
+    ".tc-list .done span{color:#6f675c;text-decoration:line-through}",
+    ".tc-kind{flex:none;font-size:11px;border-radius:999px;padding:1px 6px}",
+    ".tc-kind.clean{color:#9a6700;background:#f8efd8}",
+    ".tc-kind.bousai{color:#b42318;background:#f8e4e1}",
+    ".tc-kind.car{color:#3d4f66;background:#e4e8ee}",
+    ".tc-note{color:#6f675c;font-size:12px;line-height:1.5;margin:8px 0 0}",
+    "#task-summary-host .ts-card{background:#fffdf8;border:1px solid #e4ddd0;border-radius:12px;padding:16px;color:#1c1917}",
+    "#task-summary-host h2{margin:0 0 4px;font-size:16px}",
+    "#task-summary-host p{margin:0 0 12px;color:#6f675c;font-size:14px;line-height:1.5}",
+    "#task-summary-host label{display:flex;align-items:center;gap:8px;font-size:14px;color:#6f675c}",
+    "#task-summary-host input{font-size:16px;padding:6px 8px;border:1px solid #e4ddd0;border-radius:8px;background:#fffdf8;color:#1c1917}"
   ].join("");
   document.head.appendChild(style);
 
-  function tokyoToday() {
+  function tokyoIso(date) {
     try {
-      return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Tokyo",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(date);
     } catch (e) {
-      return "";
+      return "2026-11-03";
     }
   }
-  function tokyoMonth(date) {
-    var iso = tokyoToday();
-    return iso ? iso.slice(0, 7) : "2026-11";
-  }
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function isoDate(value) { return /^\d{4}-\d{2}-\d{2}$/.test(value || ""); }
+  function hasTime(value) { return /^\d{2}:\d{2}$/.test(value || ""); }
   function esc(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
     });
   }
-  function memos() {
-    var data = typeof window.__taskGet === "function" ? window.__taskGet() : null;
-    return data && Array.isArray(data.memos) ? data.memos : [];
+  function cmp(a, b) {
+    a = String(a || "");
+    b = String(b || "");
+    if (a < b) return -1;
+    if (a > b) return 1;
+    return 0;
   }
-  function hasTime(value) { return /^\d{2}:\d{2}$/.test(value || ""); }
-  function onDay(iso) {
-    return memos().filter(function (memo) { return memo && memo.due === iso; }).sort(function (a, b) {
-      var at = hasTime(a.time) ? a.time : "99:99";
-      var bt = hasTime(b.time) ? b.time : "99:99";
-      if (at !== bt) return at < bt ? -1 : 1;
-      return String(a.text || "").localeCompare(String(b.text || ""), "ja");
+  function addDays(iso, days) {
+    var p = iso.split("-").map(Number);
+    return new Date(Date.UTC(p[0], p[1] - 1, p[2]) + days * 86400000).toISOString().slice(0, 10);
+  }
+  function addMonths(iso, months) {
+    var p = iso.split("-").map(Number);
+    var total = p[0] * 12 + (p[1] - 1) + months;
+    var year = Math.floor(total / 12);
+    var month0 = total % 12;
+    if (month0 < 0) month0 += 12;
+    var dim = new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
+    return year + "-" + pad(month0 + 1) + "-" + pad(Math.min(p[2], dim));
+  }
+  function jpDate(iso) {
+    var p = iso.split("-").map(Number);
+    var dow = "日月火水木金土"[new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay()];
+    return p[1] + "月" + p[2] + "日（" + dow + "）";
+  }
+  function getData() {
+    return typeof window.__taskGet === "function" ? window.__taskGet() : null;
+  }
+  function wholeNumber(value) {
+    return typeof value === "number" && isFinite(value) && Math.floor(value) === value ? value : null;
+  }
+  function nextClean(item) {
+    var cycle = wholeNumber(item && item.cycle);
+    if (!item || !isoDate(item.done) || cycle == null) return null;
+    return addDays(item.done, cycle);
+  }
+  function nextCar(item) {
+    var months = wholeNumber(item && item.months);
+    if (!item || !isoDate(item.done) || months == null || months === 0) return null;
+    return addMonths(item.done, months);
+  }
+  function cleanTitle(item) {
+    return [item.place, item.task].map(function (v) { return String(v || "").trim(); }).filter(Boolean).join(" ") || "掃除";
+  }
+  function bousaiTitle(item) {
+    var name = String(item.item || "").trim() || "防災グッズ";
+    var qty = String(item.qty || "").trim();
+    return qty ? name + "（" + qty + "）" : name;
+  }
+  function board() {
+    var data = getData() || {};
+    var removed = {};
+    (Array.isArray(data.removed) ? data.removed : []).forEach(function (kind) { removed[kind] = true; });
+    var memos = (Array.isArray(data.memos) ? data.memos : []).filter(function (memo) {
+      return memo && String(memo.text || "").trim();
     });
+    var cleaning = removed.clean || !Array.isArray(data.cleaning) ? [] : data.cleaning.filter(Boolean);
+    var bousai = removed.bousai || !Array.isArray(data.bousai) ? [] : data.bousai.filter(Boolean);
+    var cars = [];
+    if (!removed.car && Array.isArray(data.tabs)) {
+      data.tabs.forEach(function (tab) {
+        if (!tab || tab.kind !== "car" || !Array.isArray(tab.items)) return;
+        tab.items.forEach(function (item) {
+          if (item) cars.push({ tabId: tab.id || "car", item: item });
+        });
+      });
+    }
+    return { memos: memos, cleaning: cleaning, bousai: bousai, cars: cars };
+  }
+  function itemsOn(iso) {
+    var data = board();
+    var memos = data.memos.filter(function (memo) { return memo.due === iso; }).sort(function (a, b) {
+      var at = hasTime(a.time) ? 0 : 1;
+      var bt = hasTime(b.time) ? 0 : 1;
+      if (at !== bt) return at - bt;
+      var byTime = cmp(a.time, b.time);
+      if (at === 0 && byTime) return byTime;
+      var byText = cmp(a.text, b.text);
+      return byText || cmp(a.id, b.id);
+    }).map(function (memo) {
+      return { kind: "memo", title: String(memo.text).trim(), time: hasTime(memo.time) ? memo.time : null, done: !!memo.done };
+    });
+    var cleaning = data.cleaning.filter(function (item) { return nextClean(item) === iso; }).map(function (item) {
+      return { kind: "clean", id: item.id, title: cleanTitle(item), tabId: "clean" };
+    }).sort(function (a, b) { return cmp(a.title, b.title) || cmp(a.id, b.id); });
+    var bousai = data.bousai.filter(function (item) { return item.due === iso; }).map(function (item) {
+      return { kind: "bousai", id: item.id, title: bousaiTitle(item), tabId: "bousai" };
+    }).sort(function (a, b) { return cmp(a.title, b.title) || cmp(a.id, b.id); });
+    var cars = data.cars.filter(function (row) { return nextCar(row.item) === iso; }).map(function (row) {
+      return { kind: "car", id: row.item.id, title: String(row.item.name || "").trim() || "車", tabId: row.tabId };
+    }).sort(function (a, b) { return cmp(a.title, b.title) || cmp(a.id, b.id); });
+    return memos.concat(cleaning, bousai, cars);
+  }
+  function marksFor(month) {
+    var marks = {};
+    function add(iso, kind) {
+      if (!isoDate(iso) || iso.slice(0, 7) !== month) return;
+      (marks[iso] || (marks[iso] = {}))[kind] = true;
+    }
+    var data = board();
+    data.memos.forEach(function (memo) { if (isoDate(memo.due)) add(memo.due, "memo"); });
+    data.cleaning.forEach(function (item) { add(nextClean(item), "clean"); });
+    data.bousai.forEach(function (item) { if (isoDate(item.due)) add(item.due, "bousai"); });
+    data.cars.forEach(function (row) { add(nextCar(row.item), "car"); });
+    return marks;
+  }
+  function dots(kinds) {
+    if (!kinds) return "";
+    var html = "";
+    ["memo", "clean", "bousai", "car"].forEach(function (kind) {
+      if (kinds[kind]) html += '<i class="' + kind + '"></i>';
+    });
+    return html ? '<span class="tc-dots">' + html + "</span>" : "";
+  }
+  function rowHtml(row) {
+    if (row.kind === "memo") {
+      var when = row.time || "時刻なし";
+      return '<li class="' + (row.done ? "done" : "") + '"><b>' + esc(when) + "</b><span>" + esc(row.title) + "</span></li>";
+    }
+    var label = row.kind === "clean" ? "掃除" : row.kind === "bousai" ? "防災" : "車";
+    return '<li><button type="button" data-cal-open="' + row.kind + '" data-cal-id="' + esc(row.id) + '" data-cal-tab="' + esc(row.tabId) + '">' +
+      '<span class="tc-kind ' + row.kind + '">' + label + "</span><span>" + esc(row.title) + "</span></button></li>";
   }
 
   function renderCalendar() {
-    var root = document.getElementById("task-cal-root");
+    var root = document.getElementById("task-cal-host");
     if (!root) return;
     var parts = cursor.split("-").map(Number);
     var year = parts[0];
     var month = parts[1];
-    var first = new Date(Date.UTC(year, month - 1, 1));
-    var startPad = first.getUTCDay();
+    var startPad = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
     var days = new Date(Date.UTC(year, month, 0)).getUTCDate();
-    var marks = {};
-    memos().forEach(function (memo) {
-      if (memo && /^\d{4}-\d{2}-\d{2}$/.test(memo.due || "")) marks[memo.due] = true;
-    });
+    var marked = marksFor(cursor);
     var cells = [];
     for (var i = 0; i < startPad; i++) cells.push('<button type="button" class="tc-day out" tabindex="-1"></button>');
     for (var day = 1; day <= days; day++) {
-      var iso = cursor + "-" + String(day).padStart(2, "0");
-      var cls = "tc-day" + (marks[iso] ? " mark" : "") + (iso === selected ? " on" : "");
-      cells.push('<button type="button" class="' + cls + '" data-cal-day="' + iso + '">' + day + "</button>");
+      var iso = cursor + "-" + pad(day);
+      var cls = "tc-day" + (iso === selected ? " on" : "") + (iso === today ? " today" : "");
+      cells.push('<button type="button" class="' + cls + '" data-cal-day="' + iso + '">' + day + dots(marked[iso]) + "</button>");
     }
-    var rows = onDay(selected).map(function (memo) {
-      var when = hasTime(memo.time) ? memo.time : "時刻なし";
-      var done = memo.done ? " done" : "";
-      return "<li class=\"" + done.trim() + "\"><b>" + esc(when) + "</b><span>" + esc(memo.text) + "</span></li>";
-    }).join("");
-    var label = year + "年" + month + "月";
-    var selLabel = selected ? selected.replace(/-/g, "/") : "";
+    var rows = itemsOn(selected).map(rowHtml).join("");
     root.innerHTML =
-      '<div data-calview="1">' +
-      '<div class="tc-head"><button type="button" data-cal-nav="-1" aria-label="前の月">‹</button><h2>' + label + '</h2><button type="button" data-cal-nav="1" aria-label="次の月">›</button></div>' +
+      '<div class="tc-card" data-calview="1">' +
+      '<div class="tc-head"><button type="button" data-cal-nav="-1" aria-label="前の月">‹</button><h2>' + year + "年" + month + '月</h2><button type="button" data-cal-nav="1" aria-label="次の月">›</button></div>' +
       '<div class="tc-week"><span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span></div>' +
       '<div class="tc-grid">' + cells.join("") + "</div>" +
-      "<h2 style=\"margin:14px 0 0;font-size:16px\">" + esc(selLabel) + "</h2>" +
-      (rows ? '<ul class="tc-list">' + rows + "</ul>" : '<p class="tc-note">この日のメモはありません。</p>') +
-      '<p class="tc-note">点のついた日にメモがあります。時刻を入れたメモは、その時刻に画面いっぱいで鳴ります。5分後にもう一度もできます。</p>' +
+      '<div class="tc-legend"><span><i class="memo"></i>メモ</span><span><i class="clean"></i>掃除</span><span><i class="bousai"></i>防災</span><span><i class="car"></i>車</span></div>' +
+      '<h3 class="tc-dayhead">' + esc(jpDate(selected)) + "</h3>" +
+      (rows ? '<ul class="tc-list">' + rows + "</ul>" : '<p class="tc-note">この日の予定はありません。</p>') +
+      '<p class="tc-note">日を押すと、その日がメモの日付になります。掃除・防災・車を押すと、そのタブで開けます。</p>' +
       "</div>";
     dirty = false;
   }
 
+  function summaryTime() {
+    try {
+      if (window.TaskNative && TaskNative.getSummaryTime) {
+        var value = TaskNative.getSummaryTime();
+        if (hasTime(value)) return value;
+      }
+    } catch (e) {}
+    return "06:00";
+  }
+  function renderSummary() {
+    var host = document.getElementById("task-summary-host");
+    if (!host || host.querySelector("[data-summary]")) return;
+    host.innerHTML =
+      '<div class="ts-card" data-summary="1">' +
+      "<h2>朝のまとめ</h2>" +
+      "<p>毎日1回、その日のメモと掃除・防災・車を通知します。何もない日は出しません。鳴るのは、日付と時刻の入ったメモだけです。</p>" +
+      '<label>通知の時刻<input type="time" step="60" data-summary-time aria-label="朝のまとめの時刻"></label>' +
+      "</div>";
+    var input = host.querySelector("[data-summary-time]");
+    input.value = summaryTime();
+    input.addEventListener("change", function () {
+      if (!hasTime(input.value)) return;
+      try {
+        if (window.TaskNative && TaskNative.setSummaryTime) TaskNative.setSummaryTime(input.value);
+      } catch (e) {}
+    });
+  }
+
+  function openChore(kind, id, tabId) {
+    var data = getData();
+    if (!data || typeof window.__taskOpen !== "function") return;
+    if (kind === "clean") {
+      var clean = (data.cleaning || []).filter(function (item) { return item && String(item.id) === String(id); })[0];
+      if (!clean) return;
+      if (window.__taskSetTab) window.__taskSetTab("clean");
+      window.__taskOpen({ t: "c", item: clean });
+    } else if (kind === "bousai") {
+      var gear = (data.bousai || []).filter(function (item) { return item && String(item.id) === String(id); })[0];
+      if (!gear) return;
+      if (window.__taskSetTab) window.__taskSetTab("bousai");
+      window.__taskOpen({ t: "b", item: gear });
+    } else if (kind === "car") {
+      var tab = (data.tabs || []).filter(function (item) { return item && String(item.id) === String(tabId); })[0];
+      var car = tab && (tab.items || []).filter(function (item) { return item && String(item.id) === String(id); })[0];
+      if (!car) return;
+      if (window.__taskSetTab) window.__taskSetTab(tabId);
+      window.__taskOpen({ t: "t", tid: tabId, item: car });
+    }
+  }
+
   document.addEventListener("click", function (event) {
-    var nav = event.target.closest("[data-cal-nav]");
-    if (nav && document.getElementById("task-cal-root")) {
+    var target = event.target;
+    if (!target || !target.closest) return;
+    var open = target.closest("[data-cal-open]");
+    if (open) {
+      openChore(open.getAttribute("data-cal-open"), open.getAttribute("data-cal-id"), open.getAttribute("data-cal-tab"));
+      return;
+    }
+    var nav = target.closest("[data-cal-nav]");
+    if (nav && document.getElementById("task-cal-host")) {
       var parts = cursor.split("-").map(Number);
-      var next = new Date(Date.UTC(parts[0], parts[1] - 1 + Number(nav.dataset.calNav), 1));
-      cursor = next.getUTCFullYear() + "-" + String(next.getUTCMonth() + 1).padStart(2, "0");
+      var next = new Date(Date.UTC(parts[0], parts[1] - 1 + Number(nav.getAttribute("data-cal-nav")), 1));
+      cursor = next.getUTCFullYear() + "-" + pad(next.getUTCMonth() + 1);
       dirty = true;
       renderCalendar();
       return;
     }
-    var day = event.target.closest("[data-cal-day]");
-    if (day) {
-      selected = day.dataset.calDay;
+    var day = target.closest("[data-cal-day]");
+    if (day && day.getAttribute("data-cal-day")) {
+      selected = day.getAttribute("data-cal-day");
+      try { if (window.__taskSetMemoDate) window.__taskSetMemoDate(selected); } catch (e) {}
       dirty = true;
       renderCalendar();
     }
@@ -113,13 +301,15 @@
   window.__taskOnData = function () {
     dirty = true;
     renderCalendar();
+    renderSummary();
   };
 
   var appRoot = document.getElementById("root");
   if (appRoot) {
     new MutationObserver(function () {
-      var root = document.getElementById("task-cal-root");
+      var root = document.getElementById("task-cal-host");
       if (root && (dirty || !root.querySelector("[data-calview]"))) renderCalendar();
+      renderSummary();
     }).observe(appRoot, { childList: true, subtree: true });
   }
 })();

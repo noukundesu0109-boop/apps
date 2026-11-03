@@ -9,7 +9,22 @@ class TaskApp : Application() {
     override fun onCreate() {
         super.onCreate()
         ensureAlarmChannel(this)
+        ensureSummaryChannel(this)
     }
+}
+
+internal fun ensureSummaryChannel(context: android.content.Context) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    val manager = context.getSystemService(NotificationManager::class.java) ?: return
+    val channel = NotificationChannel(
+        AlarmIntents.SUMMARY_CHANNEL_ID,
+        context.getString(R.string.summary_channel_name),
+        NotificationManager.IMPORTANCE_DEFAULT,
+    ).apply {
+        description = context.getString(R.string.summary_channel_desc)
+        lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+    }
+    manager.createNotificationChannel(channel)
 }
 
 internal fun ensureAlarmChannel(context: android.content.Context) {

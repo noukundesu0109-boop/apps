@@ -18,6 +18,13 @@ internal class AlarmStore(context: Context) {
 
     fun writeWork(json: String) = write(file("work-state.json"), json)
 
+    fun readSummaryTime(): String {
+        val parsed = dev.nossam.task.plan.MemoPlanner.parseTime(read(file("summary-time.txt"))?.trim())
+        return if (parsed == null) "06:00" else "%02d:%02d".format(parsed.hour, parsed.minute)
+    }
+
+    fun writeSummaryTime(hhmm: String) = write(file("summary-time.txt"), hhmm)
+
     fun readSnoozes(): List<StoredSnooze> {
         val text = read(file("snoozes.json")) ?: return emptyList()
         return try {

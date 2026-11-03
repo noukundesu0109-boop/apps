@@ -13,8 +13,8 @@ android {
         applicationId = "dev.nossam.task"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     buildTypes {
@@ -70,7 +70,11 @@ val prepareWeb = tasks.register("prepareTaskWeb") {
         check(index.contains("android-bridge.js")) { "bridge script was not injected" }
         check(index.contains("TaskNative.onState")) { "state hook was not injected" }
         check(index.contains("data-memo-time")) { "memo time field was not injected" }
-        check(index.contains("task-cal-root")) { "calendar host was not injected" }
+        check(index.contains("task-cal-host")) { "calendar host was not injected" }
+        check(index.contains("task-summary-host")) { "summary host was not injected" }
+        check(index.contains("__taskSetMemoDate")) { "memo date bridge was not injected" }
+        check(index.contains("__taskOpen")) { "editor bridge was not injected" }
+        check(!index.contains("`cal`,`カレンダー`")) { "separate calendar tab is still present" }
         check(!index.contains("serviceWorker.register")) { "service worker registration still present" }
     }
 }
@@ -110,7 +114,7 @@ fun patchIndex(html: String): String {
     text = replaceOne(
         text,
         """function en({memos:e,today:t,onAdd:n,onToggle:r,onEdit:i,frequent:a,onEditFreq:o}){let[s,c]=(0,l.useState)(``),[u,d]=(0,l.useState)(null),[f,p]=(0,l.useState)(!1),m=(0,l.useRef)(null),h=()=>{let e=s.trim();e&&(n(e,u),c(``),d(null)),m.current?.focus()}""",
-        """function en({memos:e,today:t,onAdd:n,onToggle:r,onEdit:i,frequent:a,onEditFreq:o}){let[s,c]=(0,l.useState)(``),[u,d]=(0,l.useState)(null),[tm,setTm]=(0,l.useState)(``),[f,p]=(0,l.useState)(!1),m=(0,l.useRef)(null),h=()=>{let e=s.trim();e&&(n(e,u,!1,tm),c(``),d(null),setTm(``)),m.current?.focus()}""",
+        """function en({memos:e,today:t,onAdd:n,onToggle:r,onEdit:i,frequent:a,onEditFreq:o}){let[s,c]=(0,l.useState)(``),[u,d]=(0,l.useState)(null),[tm,setTm]=(0,l.useState)(``),[f,p]=(0,l.useState)(!1),m=(0,l.useRef)(null);window.__taskSetMemoDate=function(v){d(v)};let h=()=>{let e=s.trim();e&&(n(e,u,!1,tm),c(``),d(null),setTm(``)),m.current?.focus()}""",
     )
     text = replaceOne(
         text,
@@ -140,22 +144,17 @@ fun patchIndex(html: String): String {
     text = replaceOne(
         text,
         """(0,l.useEffect)(()=>{try{localStorage.setItem(Ze,JSON.stringify(n))}catch{}},[n])""",
-        """(0,l.useEffect)(()=>{try{localStorage.setItem(Ze,JSON.stringify(n))}catch(e){}try{window.__taskGet=function(){return n};window.__taskSet=r;window.__taskSetTab=a}catch(e){}try{window.TaskNative&&window.TaskNative.onState(JSON.stringify(n))}catch(e){}try{window.__taskOnData&&window.__taskOnData(n)}catch(e){}},[n])""",
+        """(0,l.useEffect)(()=>{try{localStorage.setItem(Ze,JSON.stringify(n))}catch(e){}try{window.__taskGet=function(){return n};window.__taskSet=r;window.__taskSetTab=a;window.__taskOpen=v}catch(e){}try{window.TaskNative&&window.TaskNative.onState(JSON.stringify(n))}catch(e){}try{window.__taskOnData&&window.__taskOnData(n)}catch(e){}},[n])""",
     )
     text = replaceOne(
         text,
-        """,[`settings`,`控え`,De]]""",
-        """,[`cal`,`カレンダー`,Ce],[`settings`,`控え`,De]]""",
+        """return(0,A.jsxs)(`div`,{"data-memoview":!0,children:[(0,A.jsxs)(`div`,{className:`mb-4 rounded-xl border border-line bg-card p-3`,children:""",
+        """return(0,A.jsxs)(`div`,{"data-memoview":!0,children:[(0,A.jsx)(`div`,{id:`task-cal-host`,className:`mb-4`}),(0,A.jsxs)(`div`,{className:`mb-4 rounded-xl border border-line bg-card p-3`,children:""",
     )
     text = replaceOne(
         text,
-        """i===`settings`&&""",
-        """i===`cal`&&(0,A.jsx)(`div`,{id:`task-cal-root`}),i===`settings`&&""",
-    )
-    text = replaceOne(
-        text,
-        """(![`memo`,`all`,`clean`,`bousai`,`settings`].includes(i)&&!w||""",
-        """(![`memo`,`all`,`clean`,`bousai`,`settings`,`cal`].includes(i)&&!w||""",
+        """i===`settings`&&(0,A.jsxs)(`div`,{className:`space-y-3`,children:[(0,A.jsxs)(`div`,{className:`rounded-xl border border-line bg-card p-4`,children:""",
+        """i===`settings`&&(0,A.jsxs)(`div`,{className:`space-y-3`,children:[(0,A.jsx)(`div`,{id:`task-summary-host`,className:`mb-3`}),(0,A.jsxs)(`div`,{className:`rounded-xl border border-line bg-card p-4`,children:""",
     )
     text = replaceOne(
         text,
@@ -165,7 +164,7 @@ fun patchIndex(html: String): String {
     text = replaceOne(
         text,
         "このブラウザにだけ残ります。月に1回はバックアップを保存して、Googleドライブに置いてください。",
-        "このアプリの中だけに残ります。月に1回はバックアップを保存してください。時刻を入れたメモは、その時刻に鳴ります。",
+        "このアプリの中だけに残ります。月に1回はバックアップを保存してください。時刻を入れたメモは、その時刻に鳴ります。朝のまとめは「控え」で時刻を変えられます。",
     )
     return text
 }

@@ -32,4 +32,13 @@ class TaskJsBridge(
     fun openPermissions() {
         main.post { ui.openPermissions() }
     }
+
+    @JavascriptInterface
+    fun getSummaryTime(): String = AlarmStore(appContext).readSummaryTime()
+
+    @JavascriptInterface
+    fun setSummaryTime(value: String) {
+        if (value.length > 8) return
+        TaskAlarms.enqueue { TaskAlarms.setSummaryTime(appContext, value) }
+    }
 }

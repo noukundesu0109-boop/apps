@@ -1,15 +1,17 @@
 package dev.nossam.task
 
 import android.app.AlarmManager
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
-import dev.nossam.task.plan.MemoEntry
+import androidx.core.app.NotificationCompat
 import dev.nossam.task.plan.MemoPlanner
 import dev.nossam.task.plan.PlannedMemoAlarm
-import dev.nossam.task.plan.parseMemos
+import dev.nossam.task.plan.TaskBoard
+import dev.nossam.task.plan.parseBoard
 import dev.nossam.task.plan.plannedMemosToJson
 import java.time.Instant
 import java.time.ZonedDateTime
@@ -77,6 +79,57 @@ internal object TaskAlarms {
         UiBridge.publishSchedule(schedule)
     }
 
+    fun setSummaryTime(context: Context, value: String) {
+        val time = MemoPlanner.parseTime(value) ?: return
+        val formatted = "%02d:%02d".format(time.hour, time.minute)
+        val app = context.applicationContext
+        val schedule = synchronized(lock) {
+            AlarmStore(app).writeSummaryTime(formatted)
+            rebuild(app)
+        }
+        UiBridge.publishSchedule(schedule)
+    }
+
+    fun showSummary(context: Context, dateIso: String?) {
+        synchronized(lock) {
+            val app = context.applicationContext
+            val board = readBoard(AlarmStore(app))
+            val date = MemoPlanner.parseDate(dateIso) ?: ZonedDateTime.now(MemoPlanner.ZONE).toLocalDate()
+            val summary = MemoPlanner.dailySummary(board, date.toString())
+            val manager = app.getSystemService(NotificationManager::class.java) ?: return
+            if (summary == null) {
+                manager.cancel(AlarmIntents.SUMMARY_NOTIFICATION_ID)
+                Log.i(TAG, "daily summary empty for $date")
+                return
+            }
+            ensureSummaryChannel(app)
+            val open = PendingIntent.getActivity(
+                app,
+                7,
+                Intent(app, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val notification = NotificationCompat.Builder(app, AlarmIntents.SUMMARY_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_stat_alarm)
+                .setContentTitle(summary.title)
+                .setContentText(summary.body.lineSequence().firstOrNull() ?: summary.title)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(summary.body))
+                .setContentIntent(open)
+                .setAutoCancel(true)
+                .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .build()
+            try {
+                manager.notify(AlarmIntents.SUMMARY_NOTIFICATION_ID, notification)
+                Log.i(TAG, "posted daily summary for $date")
+            } catch (error: SecurityException) {
+                Log.w(TAG, "daily summary notification was rejected", error)
+            }
+        }
+    }
+
     fun canExact(context: Context): Boolean {
         val manager = context.getSystemService(AlarmManager::class.java) ?: return false
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -88,9 +141,9 @@ internal object TaskAlarms {
 
     private fun rebuild(context: Context): String {
         val store = AlarmStore(context)
-        val data = readWork(store)
+        val board = readBoard(store)
         val now = ZonedDateTime.now(MemoPlanner.ZONE)
-        val planned = MemoPlanner.plan(data, now).toMutableList()
+        val planned = MemoPlanner.plan(board.memos, now).toMutableList()
         val snoozes = store.readSnoozes().filter { it.atMillis > System.currentTimeMillis() + 5_000L }
         store.writeSnoozes(snoozes)
         for (snooze in snoozes) {
@@ -109,7 +162,8 @@ internal object TaskAlarms {
         val manager = context.getSystemService(AlarmManager::class.java)
         val previous = store.readCodes()
         if (manager != null) cancelAll(context, manager, previous)
-        val ids = planned.map { it.id } + "maintenance"
+        val summaryAt = MemoPlanner.nextSummaryAt(now, store.readSummaryTime())
+        val ids = planned.map { it.id } + listOf("maintenance", "summary")
         val codes = assignCodes(ids, previous)
         val exact = manager != null && canExact(context)
         if (manager != null) {
@@ -117,20 +171,21 @@ internal object TaskAlarms {
                 scheduleFire(context, manager, codes.getValue(alarm.id), alarm, exact)
             }
             scheduleMaintenance(context, manager, codes.getValue("maintenance"), maintenanceAt(now), exact)
+            scheduleSummary(context, manager, codes.getValue("summary"), summaryAt, exact)
         }
         store.writeCodes(codes)
-        Log.i(TAG, "scheduled ${planned.size} alarms exact=$exact")
+        Log.i(TAG, "scheduled ${planned.size} alarms exact=$exact summary=${summaryAt.toLocalTime()}")
         return plannedMemosToJson(planned)
     }
 
-    private fun readWork(store: AlarmStore): List<MemoEntry> {
+    private fun readBoard(store: AlarmStore): TaskBoard {
         val json = store.readWork()
-        if (json.isNullOrBlank()) return emptyList()
+        if (json.isNullOrBlank()) return TaskBoard()
         return try {
-            parseMemos(json)
+            parseBoard(json)
         } catch (error: Exception) {
-            Log.w(TAG, "memo state could not be read", error)
-            emptyList()
+            Log.w(TAG, "task state could not be read", error)
+            TaskBoard()
         }
     }
 
@@ -153,7 +208,11 @@ internal object TaskAlarms {
 
     private fun cancelAll(context: Context, manager: AlarmManager, codes: Map<String, Int>) {
         for ((id, code) in codes) {
-            val action = if (id == "maintenance") AlarmIntents.ACTION_MAINT else AlarmIntents.ACTION_FIRE
+            val action = when (id) {
+                "maintenance" -> AlarmIntents.ACTION_MAINT
+                "summary" -> AlarmIntents.ACTION_SUMMARY
+                else -> AlarmIntents.ACTION_FIRE
+            }
             manager.cancel(pendingBroadcast(context, action, code))
         }
     }
@@ -216,6 +275,39 @@ internal object TaskAlarms {
         } catch (error: SecurityException) {
             Log.w(TAG, "maintenance alarm was rejected", error)
             manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, operation)
+        }
+    }
+
+    private fun scheduleSummary(
+        context: Context,
+        manager: AlarmManager,
+        requestCode: Int,
+        whenAt: ZonedDateTime,
+        exact: Boolean,
+    ) {
+        val intent = Intent(context, AlarmReceiver::class.java).setAction(AlarmIntents.ACTION_SUMMARY).apply {
+            putExtra(AlarmIntents.EXTRA_DATE, whenAt.toLocalDate().toString())
+        }
+        val operation = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val trigger = whenAt.toInstant().toEpochMilli()
+        try {
+            if (exact) {
+                manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, operation)
+            } else {
+                manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, operation)
+            }
+        } catch (error: SecurityException) {
+            Log.w(TAG, "summary alarm was rejected", error)
+            try {
+                manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, operation)
+            } catch (fallback: Exception) {
+                Log.e(TAG, "could not schedule the daily summary", fallback)
+            }
         }
     }
 

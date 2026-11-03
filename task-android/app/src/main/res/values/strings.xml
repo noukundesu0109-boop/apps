@@ -3,4 +3,6 @@
     <string name="app_name">タスク</string>
     <string name="channel_name">アラーム</string>
     <string name="channel_desc">メモの時刻アラーム</string>
+    <string name="summary_channel_name">朝のまとめ</string>
+    <string name="summary_channel_desc">その日のメモと、掃除・防災・車の予定を知らせます</string>
 </resources>
