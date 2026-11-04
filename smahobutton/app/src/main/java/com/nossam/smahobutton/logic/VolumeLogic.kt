@@ -66,6 +66,7 @@ class ForegroundDebounce(val windowMs: Long = 450L) {
 data class VolumeMemory(
     val managedPackage: String? = null,
     val baseline: Int? = null,
+    val usingCar: Boolean = false,
 )
 
 data class VolumeChange(
@@ -85,12 +86,21 @@ fun applyForeground(
     currentVolume: Int,
     saved: Map<String, Int>,
     restoreOnLeave: Boolean,
+    carOutput: Boolean = false,
 ): VolumeChange {
-    if (packageName == memory.managedPackage) return VolumeChange(memory)
+    if (packageName == memory.managedPackage) {
+        if (carOutput == memory.usingCar) return VolumeChange(memory)
+        val switched = saved[packageName]
+        return if (switched != null) {
+            VolumeChange(memory.copy(usingCar = carOutput), switched)
+        } else {
+            VolumeChange(memory.copy(usingCar = carOutput))
+        }
+    }
     val target = saved[packageName]
     if (target != null) {
         val baseline = if (memory.managedPackage == null) currentVolume else memory.baseline
-        return VolumeChange(VolumeMemory(packageName, baseline), target)
+        return VolumeChange(VolumeMemory(packageName, baseline, carOutput), target)
     }
     if (memory.managedPackage != null && restoreOnLeave && memory.baseline != null) {
         return VolumeChange(VolumeMemory(), memory.baseline)
@@ -116,10 +126,11 @@ class ForegroundVolumeCoordinator(val windowMs: Long = 450L) {
         saved: Map<String, Int>,
         restoreOnLeave: Boolean,
         filter: FilterConfig,
+        carOutput: Boolean = false,
     ): VolumeOutcome {
         if (PackageFilter.isNoise(packageName, filter)) return VolumeOutcome()
         val confirmed = debounce.onEvent(packageName!!, now) ?: return VolumeOutcome()
-        return commit(confirmed, currentVolume, saved, restoreOnLeave)
+        return commit(confirmed, currentVolume, saved, restoreOnLeave, carOutput)
     }
 
     fun poll(
@@ -127,9 +138,10 @@ class ForegroundVolumeCoordinator(val windowMs: Long = 450L) {
         currentVolume: Int,
         saved: Map<String, Int>,
         restoreOnLeave: Boolean,
+        carOutput: Boolean = false,
     ): VolumeOutcome {
         val confirmed = debounce.poll(now) ?: return VolumeOutcome()
-        return commit(confirmed, currentVolume, saved, restoreOnLeave)
+        return commit(confirmed, currentVolume, saved, restoreOnLeave, carOutput)
     }
 
     /** Milliseconds until [poll] might confirm a new package, or null if nothing is pending. */
@@ -144,9 +156,10 @@ class ForegroundVolumeCoordinator(val windowMs: Long = 450L) {
         currentVolume: Int,
         saved: Map<String, Int>,
         restoreOnLeave: Boolean,
+        carOutput: Boolean,
     ): VolumeOutcome {
         confirmedPackage = packageName
-        val change = applyForeground(memory, packageName, currentVolume, saved, restoreOnLeave)
+        val change = applyForeground(memory, packageName, currentVolume, saved, restoreOnLeave, carOutput)
         memory = change.memory
         return VolumeOutcome(packageName, change.setVolume)
     }

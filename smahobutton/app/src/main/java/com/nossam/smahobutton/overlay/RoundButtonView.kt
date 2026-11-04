@@ -7,18 +7,23 @@ import android.graphics.Outline
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.Region
 import android.view.View
 import android.view.ViewOutlineProvider
 import com.nossam.smahobutton.dp
 import com.nossam.smahobutton.logic.ButtonSpec
+import com.nossam.smahobutton.logic.SHAPE_ROBOT
 import com.nossam.smahobutton.logic.paletteArgb
+import com.nossam.smahobutton.logic.prefersDarkInk
+import kotlin.math.hypot
 
 class RoundButtonView(context: Context) : View(context) {
     var spec: ButtonSpec = ButtonSpec()
         set(value) {
             field = value
-            contentDescription = value.label.ifBlank { "ボタン" }
+            contentDescription = value.label.ifBlank { if (value.shape == SHAPE_ROBOT) "ロボット" else "ボタン" }
             invalidate()
+            invalidateOutline()
         }
 
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -37,11 +42,23 @@ class RoundButtonView(context: Context) : View(context) {
         isFakeBoldText = true
     }
     private val oval = RectF()
+    private val robotPath = Path()
 
     init {
         outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(view: View, outline: Outline) {
-                outline.setOval(0, 0, view.width, view.height)
+                if (spec.shape == SHAPE_ROBOT && view.width > 0) {
+                    val head = robotBox(view.width.toFloat())
+                    outline.setRoundRect(
+                        head.head.left.toInt(),
+                        head.head.top.toInt(),
+                        head.head.right.toInt(),
+                        head.head.bottom.toInt(),
+                        head.head.width() * 0.22f,
+                    )
+                } else {
+                    outline.setOval(0, 0, view.width, view.height)
+                }
             }
         }
         elevation = context.dp(3).toFloat()
@@ -49,8 +66,34 @@ class RoundButtonView(context: Context) : View(context) {
         isHapticFeedbackEnabled = true
     }
 
+    fun hit(x: Float, y: Float): Boolean {
+        if (width <= 0 || height <= 0) return false
+        return if (spec.shape == SHAPE_ROBOT) {
+            val region = Region()
+            region.setPath(
+                robotOutline(width.toFloat()),
+                Region(0, 0, width, height),
+            )
+            region.contains(x.toInt(), y.toInt())
+        } else {
+            val cx = width / 2f
+            val cy = height / 2f
+            hypot(x - cx, y - cy) <= cx
+        }
+    }
+
+    fun touchPath(): Path = if (spec.shape == SHAPE_ROBOT && width > 0) {
+        robotOutline(width.toFloat())
+    } else {
+        Path().apply { addCircle(width / 2f, height / 2f, width / 2f, Path.Direction.CW) }
+    }
+
     override fun onDraw(canvas: Canvas) {
         if (width <= 0 || height <= 0) return
+        if (spec.shape == SHAPE_ROBOT) {
+            drawRobot(canvas, width.toFloat())
+            return
+        }
         val cx = width / 2f
         val cy = height / 2f
         val radius = cx - context.dp(1).toFloat()
@@ -66,6 +109,78 @@ class RoundButtonView(context: Context) : View(context) {
             drawIcon(canvas, spec.icon, cx, cy, radius)
         }
     }
+
+    private fun drawRobot(canvas: Canvas, size: Float) {
+        val box = robotBox(size)
+        val body = paletteArgb(spec.color).toInt()
+        val ink = if (prefersDarkInk(paletteArgb(spec.color))) 0xFF1C1B19.toInt() else Color.WHITE
+        fill.color = body
+        canvas.drawRoundRect(box.earLeft, box.earRadius, box.earRadius, fill)
+        canvas.drawRoundRect(box.earRight, box.earRadius, box.earRadius, fill)
+        canvas.drawRoundRect(box.stick, box.stick.width() / 2f, box.stick.width() / 2f, fill)
+        canvas.drawCircle(box.ballX, box.ballY, box.ballRadius, fill)
+        canvas.drawRoundRect(box.head, box.headCorner, box.headCorner, fill)
+        fill.color = ink
+        canvas.drawOval(box.eyeLeft, fill)
+        canvas.drawOval(box.eyeRight, fill)
+        icon.color = ink
+        icon.style = Paint.Style.STROKE
+        icon.strokeWidth = size * 0.035f
+        icon.strokeCap = Paint.Cap.ROUND
+        val smile = Path()
+        smile.moveTo(box.smileLeft, box.smileY)
+        smile.quadTo(size / 2f, box.smileY + size * 0.09f, box.smileRight, box.smileY)
+        canvas.drawPath(smile, icon)
+        icon.style = Paint.Style.FILL
+    }
+
+    private fun robotOutline(size: Float): Path {
+        val box = robotBox(size)
+        robotPath.rewind()
+        robotPath.addRoundRect(box.head, box.headCorner, box.headCorner, Path.Direction.CW)
+        robotPath.addRoundRect(box.earLeft, box.earRadius, box.earRadius, Path.Direction.CW)
+        robotPath.addRoundRect(box.earRight, box.earRadius, box.earRadius, Path.Direction.CW)
+        robotPath.addRoundRect(box.stick, box.stick.width() / 2f, box.stick.width() / 2f, Path.Direction.CW)
+        robotPath.addCircle(box.ballX, box.ballY, box.ballRadius, Path.Direction.CW)
+        return robotPath
+    }
+
+    private fun robotBox(size: Float): RobotBox {
+        val head = RectF(size * 0.16f, size * 0.28f, size * 0.84f, size * 0.96f)
+        return RobotBox(
+            head = head,
+            headCorner = size * 0.16f,
+            earLeft = RectF(size * 0.07f, size * 0.50f, size * 0.20f, size * 0.68f),
+            earRight = RectF(size * 0.80f, size * 0.50f, size * 0.93f, size * 0.68f),
+            earRadius = size * 0.04f,
+            stick = RectF(size * 0.46f, size * 0.14f, size * 0.54f, size * 0.32f),
+            ballX = size * 0.50f,
+            ballY = size * 0.09f,
+            ballRadius = size * 0.065f,
+            eyeLeft = RectF(size * 0.30f, size * 0.44f, size * 0.44f, size * 0.64f),
+            eyeRight = RectF(size * 0.56f, size * 0.44f, size * 0.70f, size * 0.64f),
+            smileLeft = size * 0.38f,
+            smileRight = size * 0.62f,
+            smileY = size * 0.72f,
+        )
+    }
+
+    private data class RobotBox(
+        val head: RectF,
+        val headCorner: Float,
+        val earLeft: RectF,
+        val earRight: RectF,
+        val earRadius: Float,
+        val stick: RectF,
+        val ballX: Float,
+        val ballY: Float,
+        val ballRadius: Float,
+        val eyeLeft: RectF,
+        val eyeRight: RectF,
+        val smileLeft: Float,
+        val smileRight: Float,
+        val smileY: Float,
+    )
 
     private fun drawLabel(canvas: Canvas, label: String, cx: Float, cy: Float) {
         text.textSize = width * 0.28f

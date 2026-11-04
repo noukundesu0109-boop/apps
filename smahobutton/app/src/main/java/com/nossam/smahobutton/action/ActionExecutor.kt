@@ -205,12 +205,14 @@ class ActionExecutor(private val app: SmahoApp) {
     private fun remember() {
         val settings = SmahoRuntime.repo.state.value ?: return
         val packageName = SmahoRuntime.confirmedPackage
+        val car = InstalledApps.isCarOutput(app)
         val result = rememberVolume(
             packageName = packageName,
             label = packageName?.let { InstalledApps.label(app, it) },
             currentVolume = InstalledApps.musicVolume(app),
             existing = settings.appVolumes,
             filter = SmahoRuntime.currentFilter(),
+            carOutput = car,
         )
         if (result.ok) {
             scope.launch {

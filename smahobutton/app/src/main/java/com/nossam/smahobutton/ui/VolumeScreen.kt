@@ -123,7 +123,8 @@ fun VolumeScreen(
                 VolumeRow(
                     entry = entry,
                     maxVolume = maxVolume,
-                    onChange = { viewModel.setAppVolume(entry.packageName, it) },
+                    onPhone = { viewModel.setAppVolume(entry.packageName, it) },
+                    onCar = { viewModel.setCarVolume(entry.packageName, it) },
                     onRemove = { viewModel.removeAppVolume(entry.packageName) },
                 )
             }
@@ -152,27 +153,55 @@ private fun SuggestionRow(suggestion: AppSuggestion, onAdd: () -> Unit) {
 private fun VolumeRow(
     entry: AppVolumeSpec,
     maxVolume: Int,
-    onChange: (Int) -> Unit,
+    onPhone: (Int) -> Unit,
+    onCar: (Int?) -> Unit,
     onRemove: () -> Unit,
 ) {
-    var level by remember(entry.packageName) { mutableFloatStateOf(entry.volume.coerceIn(0, maxVolume).toFloat()) }
+    var phone by remember(entry.packageName, entry.volume) {
+        mutableFloatStateOf(entry.volume.coerceIn(0, maxVolume).toFloat())
+    }
+    var car by remember(entry.packageName, entry.carVolume, entry.volume) {
+        mutableFloatStateOf((entry.carVolume ?: entry.volume).coerceIn(0, maxVolume).toFloat())
+    }
+    val carText = entry.carVolume?.toString() ?: "未設定"
     Card {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AppIcon(entry.packageName)
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(entry.label, style = MaterialTheme.typography.titleMedium)
-                    Text("音量 ${level.roundToInt()} / $maxVolume", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "スマホ ${entry.volume} / 車 $carText",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 TextButton(onClick = onRemove) { Text("削除") }
             }
+            Text("スマホ", style = MaterialTheme.typography.bodyMedium)
             Slider(
-                value = level,
-                onValueChange = { level = it },
-                onValueChangeFinished = { onChange(level.roundToInt()) },
+                value = phone,
+                onValueChange = { phone = it },
+                onValueChangeFinished = { onPhone(phone.roundToInt()) },
                 valueRange = 0f..maxVolume.toFloat(),
                 steps = (maxVolume - 1).coerceAtLeast(0),
             )
+            Text("車（Bluetooth）", style = MaterialTheme.typography.bodyMedium)
+            Slider(
+                value = car,
+                onValueChange = { car = it },
+                onValueChangeFinished = { onCar(car.roundToInt()) },
+                valueRange = 0f..maxVolume.toFloat(),
+                steps = (maxVolume - 1).coerceAtLeast(0),
+            )
+            if (entry.carVolume != null) {
+                TextButton(onClick = { onCar(null) }) { Text("車はスマホと同じ") }
+            } else {
+                Text(
+                    "車が未設定のときは、スマホの音量を使います。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

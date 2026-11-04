@@ -105,6 +105,24 @@ class SettingsCodecTest {
     }
 
     @Test
+    fun oldBackupRestoresThePhoneSlotAndLeavesTheCarUnset() {
+        val spec = SettingsJson.decode(
+            """{"appVolumes":[{"packageName":"com.google.android.youtube","label":"YouTube","volume":4}]}""",
+        )
+        assertEquals(4, spec.appVolumes.single().volume)
+        assertEquals(null, spec.appVolumes.single().carVolume)
+    }
+
+    @Test
+    fun unknownShapeStaysACircle() {
+        val spec = normalize(SettingsSpec(buttons = listOf(ButtonSpec(shape = "star"))))
+        assertEquals(SHAPE_CIRCLE, spec.buttons.single().shape)
+        assertEquals(SHAPE_CIRCLE, defaultButton(2).shape)
+        assertTrue(prefersDarkInk(0xFFFB8C00))
+        assertTrue(!prefersDarkInk(0xFF8E24AA))
+    }
+
+    @Test
     fun duplicateVolumesKeepTheLaterValue() {
         val volumes = normalizeVolumes(
             listOf(

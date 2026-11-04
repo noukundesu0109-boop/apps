@@ -22,6 +22,7 @@ data class ButtonSpec(
     val label: String = "",
     val edge: String = "right",
     val yFraction: Float = 0.58f,
+    val shape: String = SHAPE_CIRCLE,
     val useMenu: Boolean = false,
     val tap: ActionSpec = ActionSpec(),
     val doubleTap: ActionSpec = ActionSpec(),
@@ -34,6 +35,7 @@ data class AppVolumeSpec(
     val packageName: String,
     val label: String = "",
     val volume: Int = 0,
+    val carVolume: Int? = null,
 )
 
 @Serializable
@@ -109,6 +111,8 @@ val ACTION_CHOICES = listOf(
 const val GESTURE_TAP = "tap"
 const val GESTURE_DOUBLE = "double"
 const val GESTURE_LONG = "long"
+const val SHAPE_CIRCLE = "circle"
+const val SHAPE_ROBOT = "robot"
 
 fun defaultButton(index: Int): ButtonSpec {
     val spots = listOf(0.58f, 0.40f, 0.74f, 0.26f, 0.88f)
@@ -188,6 +192,7 @@ fun normalize(spec: SettingsSpec): SettingsSpec {
             label = raw.label.trim().take(4),
             edge = if (raw.edge == "left") "left" else "right",
             yFraction = if (raw.yFraction.isNaN()) 0.58f else raw.yFraction.coerceIn(0.08f, 0.92f),
+            shape = if (raw.shape == SHAPE_ROBOT) SHAPE_ROBOT else SHAPE_CIRCLE,
             tap = normalizeAction(raw.tap),
             doubleTap = normalizeAction(raw.doubleTap),
             longPress = normalizeAction(raw.longPress),
@@ -206,6 +211,7 @@ fun normalizeVolumes(list: List<AppVolumeSpec>): List<AppVolumeSpec> {
             packageName = pkg,
             label = item.label.trim().ifEmpty { pkg }.take(40),
             volume = item.volume.coerceIn(0, 200),
+            carVolume = item.carVolume?.coerceIn(0, 200),
         )
     }
     return map.values.toList()
@@ -276,19 +282,40 @@ data class RememberResult(
     val updated: List<AppVolumeSpec>,
 )
 
+fun volumeForOutput(phone: Int, car: Int?, carOutput: Boolean): Int =
+    if (carOutput && car != null) car else phone
+
+/** Light button colors get dark eyes so the face stays readable. */
+fun prefersDarkInk(argb: Long): Boolean {
+    val color = argb.toInt()
+    val r = ((color ushr 16) and 0xFF) / 255.0
+    val g = ((color ushr 8) and 0xFF) / 255.0
+    val b = (color and 0xFF) / 255.0
+    val luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return luminance >= 0.55
+}
+
 fun rememberVolume(
     packageName: String?,
     label: String?,
     currentVolume: Int,
     existing: List<AppVolumeSpec>,
     filter: FilterConfig,
+    carOutput: Boolean = false,
 ): RememberResult {
     if (packageName == null || PackageFilter.isNoise(packageName, filter)) {
         return RememberResult(false, "この画面のアプリは覚えられません", existing)
     }
     val name = (label?.trim()?.takeIf { it.isNotEmpty() } ?: packageName).take(18)
     val volume = currentVolume.coerceIn(0, 200)
-    val next = existing.filter { it.packageName != packageName } +
-        AppVolumeSpec(packageName, name, volume)
-    return RememberResult(true, "$name の音量を覚えました", next)
+    val previous = existing.find { it.packageName == packageName }
+    val saved = when {
+        previous == null && carOutput -> AppVolumeSpec(packageName, name, volume, carVolume = volume)
+        previous == null -> AppVolumeSpec(packageName, name, volume, carVolume = null)
+        carOutput -> previous.copy(label = name, carVolume = volume)
+        else -> previous.copy(label = name, volume = volume)
+    }
+    val next = existing.filter { it.packageName != packageName } + saved
+    val message = if (carOutput) "$name の車の音量を覚えました" else "$name の音量を覚えました"
+    return RememberResult(true, message, next)
 }

@@ -126,7 +126,7 @@ class FloatingOverlay(
         button.menu.forEachIndexed { index, action ->
             val (dx, dy) = offsets.getOrElse(index) { 0f to 0f }
             val item = RoundButtonView(context).apply {
-                spec = button.copy(label = actionShort(action), alpha = 1f)
+                spec = button.copy(label = actionShort(action), alpha = 1f, shape = "circle")
                 alpha = 1f
                 contentDescription = actionShort(action)
                 setOnClickListener {
@@ -205,9 +205,21 @@ class FloatingOverlay(
             spec = spec,
         )
         view.setOnTouchListener { _, event ->
-            onTouch(holder, event)
-            true
+            val outside = event.actionMasked == MotionEvent.ACTION_DOWN && !view.hit(event.x, event.y)
+            if (outside) {
+                false
+            } else {
+                onTouch(holder, event)
+                true
+            }
         }
+        view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {
+                installTouchableRegion(v) { (v as RoundButtonView).touchPath() }
+            }
+
+            override fun onViewDetachedFromWindow(v: View) = Unit
+        })
         try {
             windowManager.addView(view, params)
             views[spec.id] = holder

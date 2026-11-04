@@ -119,6 +119,61 @@ class ForegroundVolumeTest {
     }
 
     @Test
+    fun switchingToTheCarKeepsTheBaselineAndUsesTheCarLevel() {
+        val entered = applyForeground(
+            VolumeMemory(),
+            "com.google.android.youtube",
+            10,
+            mapOf("com.google.android.youtube" to 3),
+            true,
+        )
+        assertEquals(3, entered.setVolume)
+        val car = applyForeground(
+            entered.memory,
+            "com.google.android.youtube",
+            3,
+            mapOf("com.google.android.youtube" to 12),
+            true,
+            carOutput = true,
+        )
+        assertEquals(12, car.setVolume)
+        assertEquals(10, car.memory.baseline)
+        assertTrue(car.memory.usingCar)
+    }
+
+    @Test
+    fun anUnsetCarVolumeUsesThePhoneLevel() {
+        assertEquals(8, volumeForOutput(8, null, carOutput = true))
+        assertEquals(12, volumeForOutput(8, 12, carOutput = true))
+        assertEquals(8, volumeForOutput(8, 12, carOutput = false))
+    }
+
+    @Test
+    fun rememberInTheCarChangesOnlyTheCarSlot() {
+        val existing = listOf(AppVolumeSpec("com.google.android.youtube", "YouTube", 4, carVolume = 6))
+        val saved = rememberVolume(
+            "com.google.android.youtube",
+            "YouTube",
+            11,
+            existing,
+            filter,
+            carOutput = true,
+        )
+        assertTrue(saved.ok)
+        assertEquals("YouTube の車の音量を覚えました", saved.message)
+        assertEquals(4, saved.updated.single().volume)
+        assertEquals(11, saved.updated.single().carVolume)
+    }
+
+    @Test
+    fun bluetoothSpeakersCountAsTheCar() {
+        assertTrue(isCarDeviceType(listOf(DEVICE_BLUETOOTH_A2DP)))
+        assertTrue(isCarDeviceType(listOf(DEVICE_BLE_HEADSET, 2)))
+        assertTrue(isCarDeviceType(listOf(DEVICE_BLE_SPEAKER)))
+        assertTrue(!isCarDeviceType(listOf(2, 3)))
+    }
+
+    @Test
     fun rememberVolumeSavesAndReplaces() {
         val existing = listOf(AppVolumeSpec("com.google.android.youtube", "YouTube", 1))
         val saved = rememberVolume(

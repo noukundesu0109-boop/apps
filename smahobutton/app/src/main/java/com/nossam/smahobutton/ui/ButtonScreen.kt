@@ -54,6 +54,8 @@ import com.nossam.smahobutton.logic.ActionSpec
 import com.nossam.smahobutton.logic.ButtonSpec
 import com.nossam.smahobutton.logic.ICONS
 import com.nossam.smahobutton.logic.PALETTE
+import com.nossam.smahobutton.logic.SHAPE_CIRCLE
+import com.nossam.smahobutton.logic.SHAPE_ROBOT
 import com.nossam.smahobutton.logic.SettingsSpec
 import com.nossam.smahobutton.logic.TYPE_OPEN_APP
 import com.nossam.smahobutton.logic.actionTitle
@@ -180,6 +182,16 @@ private fun ButtonCard(
                     it.alpha = alpha
                 },
             )
+            Text("デザイン")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(SHAPE_CIRCLE to "まる", SHAPE_ROBOT to "ロボット").forEach { (key, name) ->
+                    FilterChip(
+                        selected = button.shape == key,
+                        onClick = { onChange { it.copy(shape = key) } },
+                        label = { Text(name) },
+                    )
+                }
+            }
             Text("色")
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PALETTE.forEach { color ->

@@ -77,6 +77,14 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    fun setCarVolume(packageName: String, volume: Int?) = edit { settings ->
+        settings.copy(
+            appVolumes = settings.appVolumes.map {
+                if (it.packageName == packageName) it.copy(carVolume = volume) else it
+            },
+        )
+    }
+
     fun removeAppVolume(packageName: String) = edit { settings ->
         settings.copy(appVolumes = settings.appVolumes.filter { it.packageName != packageName })
     }
