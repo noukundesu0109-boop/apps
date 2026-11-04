@@ -258,6 +258,23 @@ class TaskBoardTest {
     }
 
     @Test
+    fun stoppingTheAlarmMarksDoneOnlyForTheDoneButtonUnlessTheSettingIsOn() {
+        assertTrue(MemoPlanner.marksDone(AlarmStop.DoneButton, doneOnStop = false))
+        assertTrue(!MemoPlanner.marksDone(AlarmStop.Later, doneOnStop = true))
+        assertTrue(!MemoPlanner.marksDone(AlarmStop.Other, doneOnStop = false))
+        assertTrue(MemoPlanner.marksDone(AlarmStop.Other, doneOnStop = true))
+        assertEquals(10, MemoPlanner.LATER_MINUTES)
+        assertEquals(
+            600_000L,
+            MemoPlanner.snoozeTrigger(1_000L, MemoPlanner.LATER_MINUTES) - 1_000L,
+        )
+        val old = parseBoard("""{"memos":[{"id":"m1","text":"病院","due":"2026-11-04","time":"18:30","done":null}]}""")
+        assertTrue(!old.doneOnStop)
+        val on = parseBoard("""{"memos":[],"doneOnStop":true}""")
+        assertTrue(on.doneOnStop)
+    }
+
+    @Test
     fun markingDoneFromTheNoticeUpdatesTheStoredItem() {
         val json = """{"memos":[{"id":"m1","text":"病院","due":"2026-11-04","time":"18:30","done":null}],"cleaning":[{"id":"c1","place":"居間","task":"床","done":"2026-10-01","cycle":30,"time":"09:00","shift":"2026-11-04"}],"bousai":[{"id":"b1","item":"水","due":"2026-11-04","time":"07:00"}]}"""
         val memo = completeOccurrence(json, "memo", "m1", "", "2026-11-04")

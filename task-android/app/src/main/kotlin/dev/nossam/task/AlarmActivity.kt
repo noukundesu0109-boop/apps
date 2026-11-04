@@ -24,6 +24,9 @@ class AlarmActivity : AppCompatActivity() {
     }
     private var titleText = "アラーム"
     private var detailText = ""
+    private var kindText = ""
+    private var itemText = ""
+    private var tabText = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,22 +79,30 @@ class AlarmActivity : AppCompatActivity() {
     private fun show(intent: Intent) {
         titleText = intent.getStringExtra(AlarmIntents.EXTRA_TITLE)?.ifBlank { null } ?: "アラーム"
         detailText = intent.getStringExtra(AlarmIntents.EXTRA_DETAIL).orEmpty()
+        kindText = intent.getStringExtra(AlarmIntents.EXTRA_KIND).orEmpty()
+        itemText = intent.getStringExtra(AlarmIntents.EXTRA_ITEM).orEmpty()
+        tabText = intent.getStringExtra(AlarmIntents.EXTRA_TAB).orEmpty()
         findViewById<TextView>(R.id.alarmTitle).text = titleText
         findViewById<TextView>(R.id.alarmDetail).text = detailText
     }
 
     private fun dismiss() {
-        startService(Intent(this, AlarmRingService::class.java).setAction(AlarmIntents.ACTION_DISMISS))
+        startService(itemIntent(AlarmIntents.ACTION_DISMISS))
         finish()
     }
 
     private fun snooze() {
-        startService(
-            Intent(this, AlarmRingService::class.java).setAction(AlarmIntents.ACTION_SNOOZE).apply {
-                putExtra(AlarmIntents.EXTRA_TITLE, titleText)
-                putExtra(AlarmIntents.EXTRA_DETAIL, detailText)
-            },
-        )
+        startService(itemIntent(AlarmIntents.ACTION_SNOOZE))
         finish()
+    }
+
+    private fun itemIntent(action: String): Intent {
+        return Intent(this, AlarmRingService::class.java).setAction(action).apply {
+            putExtra(AlarmIntents.EXTRA_TITLE, titleText)
+            putExtra(AlarmIntents.EXTRA_DETAIL, detailText)
+            putExtra(AlarmIntents.EXTRA_KIND, kindText)
+            putExtra(AlarmIntents.EXTRA_ITEM, itemText)
+            putExtra(AlarmIntents.EXTRA_TAB, tabText)
+        }
     }
 }

@@ -554,7 +554,8 @@
     var choices = [0, 5, 10, 15, 30, 60];
     var lead = data && choices.indexOf(data.leadMinutes) >= 0 ? String(data.leadMinutes) : "10";
     var on = !data || data.nextTaskNotice !== false;
-    var sig = lead + "|" + (on ? "1" : "0");
+    var doneOnStop = !!(data && data.doneOnStop);
+    var sig = lead + "|" + (on ? "1" : "0") + "|" + (doneOnStop ? "1" : "0");
     if (host.getAttribute("data-sig") === sig && host.querySelector("[data-ahead]")) return;
     host.setAttribute("data-sig", sig);
     var labels = { "0": "なし", "5": "5分前", "10": "10分前", "15": "15分前", "30": "30分前", "60": "1時間前" };
@@ -567,13 +568,19 @@
       "<h2>次のタスク</h2>" +
       '<label><input type="checkbox" id="task-next-notice"' + (on ? " checked" : "") + "><span>次のタスクを通知に出す</span></label>" +
       "<p>オンにすると、今日の次の予定を通知に出し続けます。音は鳴らしません。最初はオンです。</p>" +
+      '<label><input type="checkbox" id="task-done-on-stop"' + (doneOnStop ? " checked" : "") + "><span>止めたら済みにする</span></label>" +
+      "<p>オンにすると、通知のボタン以外でアラームを止めたときも済みにします。スワイプで消したときも同じです。最初はオフです。</p>" +
       '<label>前もって知らせる<select id="task-lead-default" aria-label="前もって知らせる">' + options + "</select></label>" +
       "<p>時刻の前にも知らせます。メモごとに変えることもできます。最初は10分前です。</p>" +
       "</div>";
     var box = host.querySelector("#task-next-notice");
+    var doneBox = host.querySelector("#task-done-on-stop");
     var select = host.querySelector("#task-lead-default");
     if (box) box.addEventListener("change", function () {
       if (window.__taskSetNextNotice) window.__taskSetNextNotice(box.checked);
+    });
+    if (doneBox) doneBox.addEventListener("change", function () {
+      if (window.__taskSetDoneOnStop) window.__taskSetDoneOnStop(doneBox.checked);
     });
     if (select) select.addEventListener("change", function () {
       if (window.__taskSetLead) window.__taskSetLead(select.value);

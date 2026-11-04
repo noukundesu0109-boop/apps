@@ -13,8 +13,8 @@ android {
         applicationId = "dev.nossam.task"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.4.0"
+        versionCode = 9
+        versionName = "1.4.1"
     }
 
     buildTypes {
@@ -84,6 +84,7 @@ val prepareWeb = tasks.register("prepareTaskWeb") {
         check(index.contains("task-ahead-host")) { "advance notice setting was not injected" }
         check(index.contains("data-memo-lead")) { "per-memo advance notice was not injected" }
         check(index.contains("nextTaskNotice")) { "next task setting was not kept in backups" }
+        check(index.contains("doneOnStop")) { "done-on-stop setting was not kept in backups" }
         check(index.contains("にずらし中")) { "postpone label was not injected" }
         check(index.contains("新しい1件だけを残し")) { "drive keep-one text was not updated" }
         check(!index.contains("serviceWorker.register")) { "service worker registration still present" }
@@ -156,7 +157,7 @@ fun patchIndex(html: String): String {
     text = replaceOne(
         text,
         """(0,l.useEffect)(()=>{try{localStorage.setItem(Ze,JSON.stringify(n))}catch{}},[n])""",
-        """(0,l.useEffect)(()=>{try{localStorage.setItem(Ze,JSON.stringify(n))}catch(e){}try{window.__taskGet=function(){return n};window.__taskSet=r;window.__taskSetTab=a;window.__taskOpen=v;window.__taskShift=function(kind,id,tabId,date){let s=/^\d{4}-\d{2}-\d{2}$/.test(date)?date:null;if(kind===`c`||kind===`clean`)ce(id,{shift:s});else if(kind===`b`||kind===`bousai`)ue(id,{shift:s});else if(tabId)me(tabId,id,{shift:s})};window.__taskSetRing=function(id,on){r(function(s){let rings=Object.assign({memo:!0},s.rings||{});rings[id]=!!on;return Object.assign({},s,{rings:rings})})};window.__taskAddMemo=function(text,due,time){let body=String(text||``).trim();if(!body)return!1;let day=/^\d{4}-\d{2}-\d{2}$/.test(String(due||``))?due:null;let clock=/^\d{2}:\d{2}$/.test(String(time||``))?time:``;try{a(`memo`)}catch(err){}D(body,day,!1,clock,null);return!0};window.__taskMarkDone=function(raw){let e=typeof raw==`string`?JSON.parse(raw):raw;if(!e||!e.id)return!1;let today=et(),ok=!1;if(e.kind===`memo`){Se(n=>n.map(m=>m.id===e.id?{...m,done:m.done||today}:m));ok=!0}else if(e.kind===`clean`){ce(e.id,{done:today,shift:null});ok=!0}else if(e.kind===`bousai`){ue(e.id,{due:null,shift:null});ok=!0}else if(e.tabId){me(e.tabId,e.id,{done:today,shift:null});ok=!0}if(ok){try{window.TaskNative&&TaskNative.ackDone(e.kind,e.id)}catch(err){}}return ok};window.__taskSetLead=function(min){let n=Number(min);r(function(s){return Object.assign({},s,{leadMinutes:[0,5,10,15,30,60].includes(n)?n:10})})};window.__taskSetNextNotice=function(on){r(function(s){return Object.assign({},s,{nextTaskNotice:!!on})})}}catch(e){}try{window.TaskNative&&window.TaskNative.onState(JSON.stringify(n))}catch(e){}try{window.__taskOnData&&window.__taskOnData(n)}catch(e){}},[n])""",
+        """(0,l.useEffect)(()=>{try{localStorage.setItem(Ze,JSON.stringify(n))}catch(e){}try{window.__taskGet=function(){return n};window.__taskSet=r;window.__taskSetTab=a;window.__taskOpen=v;window.__taskShift=function(kind,id,tabId,date){let s=/^\d{4}-\d{2}-\d{2}$/.test(date)?date:null;if(kind===`c`||kind===`clean`)ce(id,{shift:s});else if(kind===`b`||kind===`bousai`)ue(id,{shift:s});else if(tabId)me(tabId,id,{shift:s})};window.__taskSetRing=function(id,on){r(function(s){let rings=Object.assign({memo:!0},s.rings||{});rings[id]=!!on;return Object.assign({},s,{rings:rings})})};window.__taskAddMemo=function(text,due,time){let body=String(text||``).trim();if(!body)return!1;let day=/^\d{4}-\d{2}-\d{2}$/.test(String(due||``))?due:null;let clock=/^\d{2}:\d{2}$/.test(String(time||``))?time:``;try{a(`memo`)}catch(err){}D(body,day,!1,clock,null);return!0};window.__taskMarkDone=function(raw){let e=typeof raw==`string`?JSON.parse(raw):raw;if(!e||!e.id)return!1;let today=et(),ok=!1;if(e.kind===`memo`){Se(n=>n.map(m=>m.id===e.id?{...m,done:m.done||today}:m));ok=!0}else if(e.kind===`clean`){ce(e.id,{done:today,shift:null});ok=!0}else if(e.kind===`bousai`){ue(e.id,{due:null,shift:null});ok=!0}else if(e.tabId){me(e.tabId,e.id,{done:today,shift:null});ok=!0}if(ok){try{window.TaskNative&&TaskNative.ackDone(e.kind,e.id)}catch(err){}}return ok};window.__taskSetLead=function(min){let n=Number(min);r(function(s){return Object.assign({},s,{leadMinutes:[0,5,10,15,30,60].includes(n)?n:10})})};window.__taskSetNextNotice=function(on){r(function(s){return Object.assign({},s,{nextTaskNotice:!!on})})};window.__taskSetDoneOnStop=function(on){r(function(s){return Object.assign({},s,{doneOnStop:!!on})})}}catch(e){}try{window.TaskNative&&window.TaskNative.onState(JSON.stringify(n))}catch(e){}try{window.__taskOnData&&window.__taskOnData(n)}catch(e){}},[n])""",
     )
     text = replaceOne(
         text,
@@ -166,7 +167,7 @@ fun patchIndex(html: String): String {
     text = replaceOne(
         text,
         """let g={version:2,cleaning:u,bousai:d,tabs:s,memos:f,frequent:m};return o.length&&(g.removed=[...new Set(o)]),g}""",
-        """let g={version:2,cleaning:u,bousai:d,tabs:s,memos:f,frequent:m};g.rings=e.rings&&typeof e.rings==`object`?{memo:!0,...e.rings}:{memo:!0};g.leadMinutes=[0,5,10,15,30,60].includes(e.leadMinutes)?e.leadMinutes:10;g.nextTaskNotice=e.nextTaskNotice!==!1;return o.length&&(g.removed=[...new Set(o)]),g}""",
+        """let g={version:2,cleaning:u,bousai:d,tabs:s,memos:f,frequent:m};g.rings=e.rings&&typeof e.rings==`object`?{memo:!0,...e.rings}:{memo:!0};g.leadMinutes=[0,5,10,15,30,60].includes(e.leadMinutes)?e.leadMinutes:10;g.nextTaskNotice=e.nextTaskNotice!==!1;g.doneOnStop=e.doneOnStop===!0;return o.length&&(g.removed=[...new Set(o)]),g}""",
     )
     text = replaceOne(
         text,

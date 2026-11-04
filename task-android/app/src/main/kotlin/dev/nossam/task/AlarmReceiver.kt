@@ -39,6 +39,9 @@ internal class AlarmReceiver : BroadcastReceiver() {
                         putExtra(AlarmIntents.EXTRA_TITLE, title)
                         putExtra(AlarmIntents.EXTRA_DETAIL, detail)
                         putExtra(AlarmIntents.EXTRA_SOURCE, source)
+                        putExtra(AlarmIntents.EXTRA_KIND, intent.getStringExtra(AlarmIntents.EXTRA_KIND))
+                        putExtra(AlarmIntents.EXTRA_ITEM, intent.getStringExtra(AlarmIntents.EXTRA_ITEM))
+                        putExtra(AlarmIntents.EXTRA_TAB, intent.getStringExtra(AlarmIntents.EXTRA_TAB))
                     }
                     try {
                         ContextCompat.startForegroundService(app, service)

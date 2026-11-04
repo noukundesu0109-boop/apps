@@ -62,11 +62,19 @@ internal object TaskAlarms {
         UiBridge.publishSchedule(schedule)
     }
 
-    fun snooze(context: Context, title: String, detail: String) {
+    fun snooze(
+        context: Context,
+        title: String,
+        detail: String,
+        minutes: Int = MemoPlanner.SNOOZE_MINUTES,
+        kind: String = "",
+        itemId: String = "",
+        tabId: String = "",
+    ) {
         val app = context.applicationContext
         val schedule = synchronized(lock) {
             val store = AlarmStore(app)
-            val at = MemoPlanner.snoozeTrigger(System.currentTimeMillis())
+            val at = MemoPlanner.snoozeTrigger(System.currentTimeMillis(), minutes)
             val kept = store.readSnoozes().filter { it.atMillis > System.currentTimeMillis() + 5_000L }
             store.writeSnoozes(
                 kept + StoredSnooze(
@@ -74,11 +82,23 @@ internal object TaskAlarms {
                     atMillis = at,
                     title = title.ifBlank { "アラーム" },
                     detail = detail,
+                    kind = kind,
+                    itemId = itemId,
+                    tabId = tabId,
                 ),
             )
             rebuild(app)
         }
         UiBridge.publishSchedule(schedule)
+    }
+
+    fun doneOnStop(context: Context): Boolean {
+        val json = AlarmStore(context.applicationContext).readWork() ?: return false
+        return try {
+            parseBoard(json).doneOnStop
+        } catch (_: Exception) {
+            false
+        }
     }
 
     fun reschedule(context: Context) {
@@ -214,6 +234,9 @@ internal object TaskAlarms {
                 time = "%02d:%02d".format(zoned.hour, zoned.minute),
                 title = snooze.title,
                 detail = snooze.detail.ifBlank { "5分後にもう一度" },
+                itemId = snooze.itemId,
+                kind = snooze.kind.ifBlank { MemoPlanner.KIND_MEMO },
+                tabId = snooze.tabId,
             )
         }
         planned.sortWith(compareBy({ it.triggerAtMillis }, { it.id }))
@@ -294,6 +317,9 @@ internal object TaskAlarms {
             putExtra(AlarmIntents.EXTRA_TITLE, alarm.title)
             putExtra(AlarmIntents.EXTRA_DETAIL, alarm.detail)
             putExtra(AlarmIntents.EXTRA_SOURCE, "memo")
+            putExtra(AlarmIntents.EXTRA_KIND, alarm.kind)
+            putExtra(AlarmIntents.EXTRA_ITEM, alarm.itemId)
+            putExtra(AlarmIntents.EXTRA_TAB, alarm.tabId)
         }
         val operation = PendingIntent.getBroadcast(
             context,

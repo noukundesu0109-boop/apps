@@ -285,7 +285,15 @@ object MemoPlanner {
     const val KIND_BOUSAI = "bousai"
     const val KIND_CAR = "car"
     const val DEFAULT_LEAD = 10
+    const val LATER_MINUTES = 10
     val LEAD_CHOICES = setOf(0, 5, 10, 15, 30, 60)
+
+    /** Whether stopping the alarm should also mark the item done. */
+    fun marksDone(stop: AlarmStop, doneOnStop: Boolean): Boolean = when (stop) {
+        AlarmStop.DoneButton -> true
+        AlarmStop.Later -> false
+        AlarmStop.Other -> doneOnStop
+    }
 
     fun parseTime(text: String?): LocalTime? {
         if (text == null || !TIME.matches(text)) return null
@@ -314,6 +322,8 @@ data class MemoEntry(
     val lead: Int? = null,
 )
 
+enum class AlarmStop { DoneButton, Later, Other }
+
 data class PlannedMemoAlarm(
     val id: String,
     val triggerAtMillis: Long,
@@ -336,6 +346,7 @@ data class TaskBoard(
     val rings: Map<String, Boolean> = emptyMap(),
     val leadMinutes: Int = MemoPlanner.DEFAULT_LEAD,
     val nextTaskNotice: Boolean = true,
+    val doneOnStop: Boolean = false,
 )
 
 data class CleanEntry(
@@ -441,6 +452,7 @@ fun parseBoard(json: String): TaskBoard {
         } else {
             true
         },
+        doneOnStop = root.has("doneOnStop") && root.opt("doneOnStop") is Boolean && root.getBoolean("doneOnStop"),
     )
 }
 

@@ -18,6 +18,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import dev.nossam.task.plan.MemoPlanner
 import java.util.concurrent.atomic.AtomicBoolean
 
 class AlarmRingService : Service() {
@@ -26,25 +27,72 @@ class AlarmRingService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var title: String = "アラーム"
     private var detail: String = ""
+    private var kind: String = ""
+    private var itemId: String = ""
+    private var tabId: String = ""
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             AlarmIntents.ACTION_DISMISS -> {
+                rememberItem(intent)
+                stopFromButton(markDone = TaskAlarms.doneOnStop(this))
+                return START_NOT_STICKY
+            }
+            AlarmIntents.ACTION_MARK_DONE -> {
+                rememberItem(intent)
+                stopFromButton(markDone = true)
+                return START_NOT_STICKY
+            }
+            AlarmIntents.ACTION_LATER -> {
+                rememberItem(intent)
+                val laterTitle = intent.getStringExtra(AlarmIntents.EXTRA_TITLE) ?: title
+                val laterDetail = intent.getStringExtra(AlarmIntents.EXTRA_DETAIL) ?: detail
+                val laterKind = kind
+                val laterItem = itemId
+                val laterTab = tabId
+                closedByButton.set(true)
                 stopRinging()
+                TaskAlarms.snooze(
+                    this,
+                    laterTitle,
+                    laterDetail,
+                    MemoPlanner.LATER_MINUTES,
+                    laterKind,
+                    laterItem,
+                    laterTab,
+                )
                 return START_NOT_STICKY
             }
             AlarmIntents.ACTION_SNOOZE -> {
+                rememberItem(intent)
                 val snoozeTitle = intent.getStringExtra(AlarmIntents.EXTRA_TITLE) ?: title
                 val snoozeDetail = intent.getStringExtra(AlarmIntents.EXTRA_DETAIL) ?: detail
+                val snoozeKind = kind
+                val snoozeItem = itemId
+                val snoozeTab = tabId
+                closedByButton.set(true)
                 stopRinging()
-                TaskAlarms.snooze(this, snoozeTitle, snoozeDetail)
+                TaskAlarms.snooze(this, snoozeTitle, snoozeDetail, kind = snoozeKind, itemId = snoozeItem, tabId = snoozeTab)
+                return START_NOT_STICKY
+            }
+            AlarmIntents.ACTION_SWIPE -> {
+                if (closedByButton.getAndSet(false)) {
+                    stopRinging()
+                    return START_NOT_STICKY
+                }
+                rememberItem(intent)
+                stopFromButton(markDone = TaskAlarms.doneOnStop(this))
                 return START_NOT_STICKY
             }
         }
         title = intent?.getStringExtra(AlarmIntents.EXTRA_TITLE)?.ifBlank { null } ?: "アラーム"
         detail = intent?.getStringExtra(AlarmIntents.EXTRA_DETAIL).orEmpty()
+        kind = intent?.getStringExtra(AlarmIntents.EXTRA_KIND).orEmpty()
+        itemId = intent?.getStringExtra(AlarmIntents.EXTRA_ITEM).orEmpty()
+        tabId = intent?.getStringExtra(AlarmIntents.EXTRA_TAB).orEmpty()
+        closedByButton.set(false)
         ensureAlarmChannel(this)
         val type = if (Build.VERSION.SDK_INT >= 34) {
             android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
@@ -73,19 +121,22 @@ class AlarmRingService : Service() {
             screenIntent(),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val dismiss = PendingIntent.getService(
+        val done = PendingIntent.getService(
             this,
             8,
-            Intent(this, AlarmRingService::class.java).setAction(AlarmIntents.ACTION_DISMISS),
+            itemIntent(AlarmIntents.ACTION_MARK_DONE),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val snooze = PendingIntent.getService(
+        val later = PendingIntent.getService(
             this,
             9,
-            Intent(this, AlarmRingService::class.java).setAction(AlarmIntents.ACTION_SNOOZE).apply {
-                putExtra(AlarmIntents.EXTRA_TITLE, title)
-                putExtra(AlarmIntents.EXTRA_DETAIL, detail)
-            },
+            itemIntent(AlarmIntents.ACTION_LATER),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val swipe = PendingIntent.getService(
+            this,
+            12,
+            itemIntent(AlarmIntents.ACTION_SWIPE),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Builder(this, AlarmIntents.CHANNEL_ID)
@@ -95,13 +146,43 @@ class AlarmRingService : Service() {
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setOngoing(true)
+            .setOngoing(false)
             .setAutoCancel(false)
+            .setDeleteIntent(swipe)
             .setFullScreenIntent(open, true)
             .setContentIntent(open)
-            .addAction(0, "止める", dismiss)
-            .addAction(0, "5分後", snooze)
+            .addAction(0, "済み", done)
+            .addAction(0, "あとで", later)
             .build()
+    }
+
+    private fun itemIntent(action: String): Intent {
+        return Intent(this, AlarmRingService::class.java).setAction(action).apply {
+            putExtra(AlarmIntents.EXTRA_TITLE, title)
+            putExtra(AlarmIntents.EXTRA_DETAIL, detail)
+            putExtra(AlarmIntents.EXTRA_KIND, kind)
+            putExtra(AlarmIntents.EXTRA_ITEM, itemId)
+            putExtra(AlarmIntents.EXTRA_TAB, tabId)
+        }
+    }
+
+    private fun rememberItem(intent: Intent) {
+        intent.getStringExtra(AlarmIntents.EXTRA_TITLE)?.takeIf { it.isNotBlank() }?.let { title = it }
+        intent.getStringExtra(AlarmIntents.EXTRA_DETAIL)?.let { detail = it }
+        intent.getStringExtra(AlarmIntents.EXTRA_KIND)?.let { kind = it }
+        intent.getStringExtra(AlarmIntents.EXTRA_ITEM)?.let { itemId = it }
+        intent.getStringExtra(AlarmIntents.EXTRA_TAB)?.let { tabId = it }
+    }
+
+    private fun stopFromButton(markDone: Boolean) {
+        val doneKind = kind
+        val doneItem = itemId
+        val doneTab = tabId
+        closedByButton.set(true)
+        stopRinging()
+        if (markDone && doneItem.isNotBlank()) {
+            TaskAlarms.complete(this, doneKind.ifBlank { MemoPlanner.KIND_MEMO }, doneItem, doneTab)
+        }
     }
 
     private fun screenIntent(): Intent {
@@ -109,6 +190,9 @@ class AlarmRingService : Service() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(AlarmIntents.EXTRA_TITLE, title)
             putExtra(AlarmIntents.EXTRA_DETAIL, detail)
+            putExtra(AlarmIntents.EXTRA_KIND, kind)
+            putExtra(AlarmIntents.EXTRA_ITEM, itemId)
+            putExtra(AlarmIntents.EXTRA_TAB, tabId)
         }
     }
 
@@ -217,6 +301,7 @@ class AlarmRingService : Service() {
 
     companion object {
         private val ringing = AtomicBoolean(false)
+        private val closedByButton = AtomicBoolean(false)
 
         fun isRinging(): Boolean = ringing.get()
     }
