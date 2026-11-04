@@ -87,8 +87,11 @@ fun applyForeground(
     saved: Map<String, Int>,
     restoreOnLeave: Boolean,
     outputKey: String = "",
+    launcherPackages: Set<String> = emptySet(),
 ): VolumeChange {
-    if (packageName == memory.managedPackage) {
+    // Home is a real leave, but a saved launcher row must never be applied.
+    val leaving = isLauncherPackage(packageName, launcherPackages)
+    if (!leaving && packageName == memory.managedPackage) {
         if (outputKey == memory.outputKey) return VolumeChange(memory)
         val switched = saved[packageName]
         return if (switched != null) {
@@ -97,7 +100,7 @@ fun applyForeground(
             VolumeChange(memory.copy(outputKey = outputKey))
         }
     }
-    val target = saved[packageName]
+    val target = if (leaving) null else saved[packageName]
     if (target != null) {
         val baseline = if (memory.managedPackage == null) currentVolume else memory.baseline
         return VolumeChange(VolumeMemory(packageName, baseline, outputKey), target)
@@ -115,6 +118,7 @@ data class VolumeOutcome(
 
 class ForegroundVolumeCoordinator(val windowMs: Long = 450L) {
     private val debounce = ForegroundDebounce(windowMs)
+    private var launcherPackages: Set<String> = emptySet()
     var memory: VolumeMemory = VolumeMemory()
     var confirmedPackage: String? = null
         private set
@@ -128,6 +132,7 @@ class ForegroundVolumeCoordinator(val windowMs: Long = 450L) {
         filter: FilterConfig,
         outputKey: String = "",
     ): VolumeOutcome {
+        launcherPackages = filter.launcherPackages
         if (PackageFilter.isNoise(packageName, filter)) return VolumeOutcome()
         val confirmed = debounce.onEvent(packageName!!, now) ?: return VolumeOutcome()
         return commit(confirmed, currentVolume, saved, restoreOnLeave, outputKey)
@@ -159,7 +164,15 @@ class ForegroundVolumeCoordinator(val windowMs: Long = 450L) {
         outputKey: String,
     ): VolumeOutcome {
         confirmedPackage = packageName
-        val change = applyForeground(memory, packageName, currentVolume, saved, restoreOnLeave, outputKey)
+        val change = applyForeground(
+            memory,
+            packageName,
+            currentVolume,
+            saved,
+            restoreOnLeave,
+            outputKey,
+            launcherPackages,
+        )
         memory = change.memory
         return VolumeOutcome(packageName, change.setVolume)
     }

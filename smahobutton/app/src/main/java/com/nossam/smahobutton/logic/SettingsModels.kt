@@ -266,6 +266,7 @@ fun normalizeVolumes(list: List<AppVolumeSpec>): List<AppVolumeSpec> {
     for (item in list) {
         val pkg = item.packageName.trim()
         if (pkg.isEmpty()) continue
+        if (isLauncherPackage(pkg, label = item.label)) continue
         map[pkg] = item.copy(
             packageName = pkg,
             label = item.label.trim().ifEmpty { pkg }.take(40),
@@ -332,8 +333,28 @@ fun suggestApps(installed: List<InstalledApp>, savedPackages: Set<String>): List
         out += AppSuggestion(tver.packageName, tver.label.ifBlank { "TVer" })
     }
     pushKnown("com.amazon.avod.thirdpartyclient")
+    pushKnown("com.amazon.avod")
+    pushKnown("com.amazon.amazonvideo.livingroom")
+    val prime = installed.firstOrNull { app ->
+        app.packageName !in savedPackages &&
+            isPrimeVideo(app.packageName, app.label) &&
+            out.none { it.packageName == app.packageName }
+    }
+    if (prime != null) out += AppSuggestion(prime.packageName, prime.label.ifBlank { "Prime Video" })
     pushKnown("com.google.android.apps.youtube.music")
     return out
+}
+
+fun rawHasLauncherVolume(raw: String?): Boolean {
+    if (raw.isNullOrBlank()) return false
+    return try {
+        val loose = Json { ignoreUnknownKeys = true; isLenient = true }
+        loose.decodeFromString<SettingsSpec>(raw).appVolumes.any {
+            isLauncherPackage(it.packageName, label = it.label)
+        }
+    } catch (_: Exception) {
+        false
+    }
 }
 
 data class RememberResult(
@@ -389,7 +410,10 @@ fun rememberVolume(
     filter: FilterConfig,
     output: OutputSlot = PHONE_SLOT,
 ): RememberResult {
-    if (packageName == null || PackageFilter.isNoise(packageName, filter)) {
+    if (packageName == null || isLauncherPackage(packageName, filter.launcherPackages, label)) {
+        return RememberResult(false, "いま開いているアプリが分かりませんでした", existing)
+    }
+    if (PackageFilter.isNoise(packageName, filter)) {
         return RememberResult(false, "この画面のアプリは覚えられません", existing)
     }
     val name = (label?.trim()?.takeIf { it.isNotEmpty() } ?: packageName).take(18)

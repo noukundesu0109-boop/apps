@@ -8,7 +8,10 @@ import org.junit.Test
 class ForegroundVolumeTest {
     private val filter = FilterConfig(
         ownPackage = "com.nossam.smahobutton",
-        launcherPackages = setOf("com.google.android.apps.nexuslauncher"),
+        launcherPackages = setOf(
+            "com.google.android.apps.nexuslauncher",
+            "com.example.myhome",
+        ),
         imePackages = setOf("com.google.android.inputmethod.latin"),
     )
 
@@ -204,7 +207,53 @@ class ForegroundVolumeTest {
 
         val blocked = rememberVolume("com.android.systemui", "System", 4, existing, filter)
         assertTrue(!blocked.ok)
+        assertEquals("この画面のアプリは覚えられません", blocked.message)
         assertEquals(existing, blocked.updated)
+    }
+
+    @Test
+    fun rememberRejectsTheLauncherAndDoesNotSaveIt() {
+        val existing = listOf(AppVolumeSpec("com.google.android.youtube", "YouTube", 4))
+        val blocked = rememberVolume(
+            "com.google.android.apps.nexuslauncher",
+            "Pixel Launcher",
+            21,
+            existing,
+            filter,
+        )
+        assertTrue(!blocked.ok)
+        assertEquals("いま開いているアプリが分かりませんでした", blocked.message)
+        assertEquals(existing, blocked.updated)
+
+        val custom = rememberVolume("com.example.myhome", "Home", 9, existing, filter)
+        assertTrue(!custom.ok)
+        assertEquals("いま開いているアプリが分かりませんでした", custom.message)
+        assertEquals(existing, custom.updated)
+
+        val unknown = rememberVolume(null, null, 9, existing, filter)
+        assertTrue(!unknown.ok)
+        assertEquals("いま開いているアプリが分かりませんでした", unknown.message)
+    }
+
+    @Test
+    fun aSavedLauncherVolumeIsNeverApplied() {
+        val coord = ForegroundVolumeCoordinator(windowMs = 100)
+        val saved = mapOf(
+            "com.google.android.youtube" to 3,
+            "com.google.android.apps.nexuslauncher" to 21,
+            "com.example.myhome" to 21,
+        )
+        val entered = coord.pollAfter("com.google.android.youtube", 0, 10, saved, true)
+        assertEquals(3, entered.setVolume)
+        val home = coord.pollAfter("com.google.android.apps.nexuslauncher", 500, 3, saved, true)
+        assertEquals(10, home.setVolume)
+        assertNull(coord.memory.managedPackage)
+
+        val again = coord.pollAfter("com.google.android.youtube", 1000, 10, saved, true)
+        assertEquals(3, again.setVolume)
+        val customHome = coord.pollAfter("com.example.myhome", 1500, 3, saved, true)
+        assertEquals(10, customHome.setVolume)
+        assertNull(coord.memory.managedPackage)
     }
 
     private fun ForegroundVolumeCoordinator.pollAfter(

@@ -1,6 +1,7 @@
 package com.nossam.smahobutton.a11y
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
 import android.content.ComponentCallbacks
 import android.content.res.Configuration
@@ -9,7 +10,11 @@ import android.graphics.Rect
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
+import com.nossam.smahobutton.logic.AppWindow
+import com.nossam.smahobutton.logic.FilterConfig
 import com.nossam.smahobutton.logic.isCameraPackage
+import com.nossam.smahobutton.logic.pickForegroundPackage
 import com.nossam.smahobutton.logic.shutterFractions
 import com.nossam.smahobutton.logic.shutterScore
 import com.nossam.smahobutton.overlay.FloatingOverlay
@@ -18,6 +23,7 @@ import com.nossam.smahobutton.runtime.SmahoRuntime
 class SmahoAccessibilityService : AccessibilityService() {
     private var overlay: FloatingOverlay? = null
     private var tornDown = false
+    private val labels = HashMap<String, String?>()
     private val configCallbacks = object : ComponentCallbacks {
         override fun onConfigurationChanged(newConfig: Configuration) {
             overlay?.relayout()
@@ -29,6 +35,7 @@ class SmahoAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        widenEvents()
         tornDown = false
         SmahoRuntime.accessibility = this
         overlay = FloatingOverlay(
@@ -39,11 +46,73 @@ class SmahoAccessibilityService : AccessibilityService() {
         SmahoRuntime.a11yOverlay = overlay
         registerComponentCallbacks(configCallbacks)
         SmahoRuntime.refreshButtons()
+        val current = runCatching { probeForeground(null) }.getOrNull()
+        if (current != null) SmahoRuntime.onWindowPackage(current)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
-        SmahoRuntime.onWindowPackage(event.packageName?.toString())
+        val type = event?.eventType ?: return
+        if (
+            type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            type != AccessibilityEvent.TYPE_WINDOWS_CHANGED
+        ) {
+            return
+        }
+        val picked = runCatching { probeForeground(event.packageName?.toString()) }.getOrNull()
+        SmahoRuntime.onWindowPackage(picked)
+    }
+
+    /** Re-reads the windows on screen. Ignores this app's overlay, the shade, and keyboards. */
+    fun probeForeground(eventPackage: String?): String? {
+        val snapshots = ArrayList<AppWindow>()
+        val listed = runCatching { windows }.getOrNull().orEmpty()
+        for (window in listed) {
+            var root: AccessibilityNodeInfo? = null
+            try {
+                root = window.root
+                val pkg = root?.packageName?.toString().orEmpty()
+                if (pkg.isNotEmpty()) {
+                    snapshots += AppWindow(
+                        packageName = pkg,
+                        typeApplication = window.type == AccessibilityWindowInfo.TYPE_APPLICATION,
+                        focused = window.isFocused,
+                        active = window.isActive,
+                    )
+                }
+            } catch (_: Exception) {
+            } finally {
+                runCatching { root?.recycle() }
+                runCatching { window.recycle() }
+            }
+        }
+        var activeRoot: AccessibilityNodeInfo? = null
+        val rootPkg = try {
+            activeRoot = rootInActiveWindow
+            activeRoot?.packageName?.toString()
+        } catch (_: Exception) {
+            null
+        } finally {
+            runCatching { activeRoot?.recycle() }
+        }
+        val filter = runCatching { SmahoRuntime.currentFilter() }.getOrNull() ?: FilterConfig(packageName)
+        return pickForegroundPackage(
+            windows = snapshots,
+            eventPackage = eventPackage,
+            rootPackage = rootPkg,
+            config = filter,
+            labelOf = { pkg -> labels.getOrPut(pkg) { SmahoRuntime.appLabel(pkg) } },
+        )
+    }
+
+    private fun widenEvents() {
+        val info = serviceInfo ?: return
+        info.eventTypes = info.eventTypes or
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED
+        info.flags = info.flags or
+            AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+            AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+        serviceInfo = info
     }
 
     fun pressShutter(onDone: (Boolean) -> Unit) {

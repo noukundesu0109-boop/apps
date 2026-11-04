@@ -151,6 +151,21 @@ object SmahoRuntime {
         }
     }
 
+    /** Package to save when the user presses 「音量を覚える」. Asks the screen again. */
+    fun foregroundForRemember(): String? {
+        val service = accessibility
+        if (service != null) return runCatching { service.probeForeground(null) }.getOrNull()
+        return confirmedPackage
+    }
+
+    fun appLabel(packageName: String): String? {
+        if (!::app.isInitialized) return null
+        return runCatching {
+            val info = app.packageManager.getApplicationInfo(packageName, 0)
+            app.packageManager.getApplicationLabel(info).toString()
+        }.getOrNull()
+    }
+
     fun onWindowPackage(packageName: String?) {
         if (!::app.isInitialized || !::repo.isInitialized) return
         val settings = repo.state.value ?: return
@@ -281,9 +296,12 @@ object SmahoRuntime {
         val pm = app.packageManager
         val launchers = runCatching {
             val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-            pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
-                .mapNotNull { it.activityInfo?.packageName }
-                .toSet()
+            pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+                ?.activityInfo
+                ?.packageName
+                ?.takeIf { it.isNotBlank() && it != "android" && it != app.packageName }
+                ?.let { setOf(it) }
+                ?: emptySet()
         }.getOrDefault(emptySet())
         val imes = runCatching {
             app.getSystemService(InputMethodManager::class.java)
@@ -345,6 +363,7 @@ object SmahoRuntime {
             saved = saved,
             restoreOnLeave = settings.restoreVolumeOnLeave,
             outputKey = output.key,
+            launcherPackages = currentFilter().launcherPackages,
         )
         coordinator.memory = change.memory
         applyVolume(change.setVolume)
@@ -363,6 +382,7 @@ object SmahoRuntime {
             saved = resolvedVolumes(settings, output),
             restoreOnLeave = settings.restoreVolumeOnLeave,
             outputKey = output.key,
+            launcherPackages = currentFilter().launcherPackages,
         )
         coordinator.memory = change.memory
         applyVolume(change.setVolume)

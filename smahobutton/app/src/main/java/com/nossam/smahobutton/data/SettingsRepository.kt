@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.nossam.smahobutton.logic.SettingsJson
 import com.nossam.smahobutton.logic.SettingsSpec
+import com.nossam.smahobutton.logic.rawHasLauncherVolume
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,6 +34,13 @@ class SettingsRepository(private val context: Context) {
 
     init {
         CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate).launch {
+            val raw = runCatching { context.dataStore.data.first()[key] }.getOrNull()
+            if (rawHasLauncherVolume(raw)) {
+                val cleaned = SettingsJson.encode(SettingsJson.decode(raw))
+                runCatching {
+                    context.dataStore.edit { prefs -> prefs[key] = cleaned }
+                }
+            }
             settings.collect { state.value = it }
         }
     }

@@ -135,6 +135,22 @@ class SettingsCodecTest {
     }
 
     @Test
+    fun launcherVolumesAreRemoved() {
+        val raw = """
+            {"appVolumes":[
+              {"packageName":"com.google.android.apps.nexuslauncher","label":"Pixel Launcher","volume":21},
+              {"packageName":"com.google.android.youtube","label":"YouTube","volume":4},
+              {"packageName":"com.custom.home","label":"Pixel Launcher","volume":2}
+            ]}
+        """.trimIndent()
+        assertTrue(rawHasLauncherVolume(raw))
+        assertTrue(!rawHasLauncherVolume("""{"appVolumes":[{"packageName":"com.google.android.youtube","label":"YouTube","volume":4}]}"""))
+        val spec = SettingsJson.decode(raw)
+        assertEquals(listOf("com.google.android.youtube"), spec.appVolumes.map { it.packageName })
+        assertEquals(4, spec.appVolumes.single().volume)
+    }
+
+    @Test
     fun duplicateVolumesKeepTheLaterValue() {
         val volumes = normalizeVolumes(
             listOf(

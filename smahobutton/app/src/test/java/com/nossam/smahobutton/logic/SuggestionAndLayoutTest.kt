@@ -49,6 +49,23 @@ class SuggestionAndLayoutTest {
     }
 
     @Test
+    fun primeIsDetectedByLabelAndByTheOtherPackages() {
+        val byLabel = suggestApps(listOf(InstalledApp("com.example.video", "プライムビデオ")), emptySet())
+        assertEquals("com.example.video", byLabel.single().packageName)
+        val packages = suggestApps(
+            listOf(
+                InstalledApp("com.amazon.avod", "Amazon Video"),
+                InstalledApp("com.amazon.amazonvideo.livingroom", "Prime Video"),
+            ),
+            emptySet(),
+        )
+        assertEquals(
+            listOf("com.amazon.avod", "com.amazon.amazonvideo.livingroom"),
+            packages.map { it.packageName },
+        )
+    }
+
+    @Test
     fun missingAppsAreNotInvented() {
         assertTrue(suggestApps(listOf(InstalledApp("com.android.chrome", "Chrome")), emptySet()).isEmpty())
     }

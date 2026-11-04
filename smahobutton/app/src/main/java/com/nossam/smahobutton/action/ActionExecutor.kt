@@ -206,7 +206,7 @@ class ActionExecutor(private val app: SmahoApp) {
 
     private fun remember() {
         val settings = SmahoRuntime.repo.state.value ?: return
-        val packageName = SmahoRuntime.confirmedPackage
+        val packageName = SmahoRuntime.foregroundForRemember()
         val output = com.nossam.smahobutton.apps.MediaOutput.current(app)
         val result = rememberVolume(
             packageName = packageName,
