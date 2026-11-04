@@ -139,12 +139,16 @@ object SmahoRuntime {
             executor.perform(action)
         }
 
-        override fun onMoved(id: String, edge: String, yFraction: Float) {
+        override fun onMoved(id: String, edge: String, xFraction: Float, yFraction: Float) {
             scope.launch {
                 repo.update { settings ->
                     settings.copy(
                         buttons = settings.buttons.map { button ->
-                            if (button.id == id) button.copy(edge = edge, yFraction = yFraction) else button
+                            if (button.id == id) {
+                                button.copy(edge = edge, xFraction = xFraction, yFraction = yFraction)
+                            } else {
+                                button
+                            }
                         },
                     )
                 }

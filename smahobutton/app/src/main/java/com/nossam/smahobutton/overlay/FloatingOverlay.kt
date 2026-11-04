@@ -26,13 +26,13 @@ import com.nossam.smahobutton.logic.ScreenEdge
 import com.nossam.smahobutton.logic.actionIcon
 import com.nossam.smahobutton.logic.actionShort
 import com.nossam.smahobutton.logic.actionTitle
+import com.nossam.smahobutton.logic.PLACE_FREE
+import com.nossam.smahobutton.logic.centerFraction
 import com.nossam.smahobutton.logic.clampFraction
-import com.nossam.smahobutton.logic.menuOffsets
-import com.nossam.smahobutton.logic.parseEdge
 import com.nossam.smahobutton.logic.placeButtons
+import com.nossam.smahobutton.logic.placeMenuItems
 import com.nossam.smahobutton.logic.sizeDp
 import com.nossam.smahobutton.logic.snapEdge
-import com.nossam.smahobutton.logic.xFor
 import kotlin.math.roundToInt
 
 class FloatingOverlay(
@@ -42,7 +42,7 @@ class FloatingOverlay(
 ) {
     interface Callbacks {
         fun onGesture(button: ButtonSpec, kind: String)
-        fun onMoved(id: String, edge: String, yFraction: Float)
+        fun onMoved(id: String, edge: String, xFraction: Float, yFraction: Float)
         fun onMenuAction(action: ActionSpec)
     }
 
@@ -52,6 +52,7 @@ class FloatingOverlay(
     private val views = linkedMapOf<String, Holder>()
     private var specs: List<ButtonSpec> = emptyList()
     private var hidden = false
+    private var folded = false
     private var menuRoot: View? = null
 
     fun render(buttons: List<ButtonSpec>) {
@@ -72,12 +73,13 @@ class FloatingOverlay(
             topPx = bar("status_bar_height", 24),
             bottomPx = bar("navigation_bar_height", 24),
             marginPx = margin,
+            tucked = folded,
         ).associateBy { it.id }
         for (spec in buttons) {
             val spot = placed[spec.id] ?: continue
             val holder = views[spec.id]
             if (holder == null) {
-                addButton(spec, spot.edge, spot.yPx, spot.sizePx, margin, bounds.width())
+                addButton(spec, spot.xPx, spot.yPx, spot.sizePx)
             } else {
                 holder.spec = spec
                 holder.view.spec = spec
@@ -85,12 +87,19 @@ class FloatingOverlay(
                 if (!holder.dragging) {
                     holder.params.width = spot.sizePx
                     holder.params.height = spot.sizePx
-                    holder.params.x = xFor(spot.edge, bounds.width(), spot.sizePx, margin)
+                    holder.params.x = spot.xPx
                     holder.params.y = spot.yPx
                     runCatching { wm.updateViewLayout(holder.view, holder.params) }
                 }
             }
         }
+    }
+
+    /** Park free buttons on the nearest edge without forgetting where they were dropped. */
+    fun setFolded(folded: Boolean) {
+        if (this.folded == folded) return
+        this.folded = folded
+        if (!hidden) render(specs)
     }
 
     fun hide() {
@@ -114,7 +123,16 @@ class FloatingOverlay(
         val cy = location[1] + holder.view.height / 2f
         val bounds = screenBounds()
         val itemSize = context.dp(64)
-        val offsets = menuOffsets(button.menu.size, parseEdge(button.edge), holder.view.width * 1.45f)
+        val spots = placeMenuItems(
+            count = button.menu.size,
+            anchorX = cx,
+            anchorY = cy,
+            screenWidth = bounds.width(),
+            screenHeight = bounds.height(),
+            itemSize = itemSize,
+            radius = holder.view.width * 1.45f,
+            margin = context.dp(8),
+        )
         val root = FrameLayout(context)
         root.setBackgroundColor(0x33000000)
         root.setOnClickListener { dismissMenu() }
@@ -128,7 +146,7 @@ class FloatingOverlay(
             }
         }
         button.menu.forEachIndexed { index, action ->
-            val (dx, dy) = offsets.getOrElse(index) { 0f to 0f }
+            val (x, y) = spots.getOrElse(index) { context.dp(8) to context.dp(8) }
             val item = RoundButtonView(context).apply {
                 val icon = actionIcon(action)
                 spec = if (icon != null) {
@@ -143,10 +161,7 @@ class FloatingOverlay(
                     callbacks.onMenuAction(action)
                 }
             }
-            val x = (cx + dx - itemSize / 2f).roundToInt()
-                .coerceIn(context.dp(8), (bounds.width() - itemSize - context.dp(8)).coerceAtLeast(context.dp(8)))
-            val y = (cy + dy - itemSize / 2f).roundToInt()
-                .coerceIn(context.dp(8), (bounds.height() - itemSize - context.dp(8)).coerceAtLeast(context.dp(8)))
+            val captionAbove = y + itemSize + context.dp(28) > bounds.height() - context.dp(8)
             root.addView(item, FrameLayout.LayoutParams(itemSize, itemSize).apply {
                 leftMargin = x
                 topMargin = y
@@ -166,8 +181,8 @@ class FloatingOverlay(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
             ).apply {
-                leftMargin = x - context.dp(4)
-                topMargin = y + itemSize + context.dp(2)
+                leftMargin = x.coerceAtMost((bounds.width() - context.dp(72)).coerceAtLeast(0))
+                topMargin = if (captionAbove) (y - context.dp(28)).coerceAtLeast(context.dp(4)) else y + itemSize + context.dp(2)
             })
         }
         val params = baseParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT).apply {
@@ -191,11 +206,9 @@ class FloatingOverlay(
 
     private fun addButton(
         spec: ButtonSpec,
-        edge: ScreenEdge,
+        xPx: Int,
         yPx: Int,
         size: Int,
-        margin: Int,
-        screenWidth: Int,
     ) {
         val windowManager = wm ?: return
         val view = RoundButtonView(context).apply {
@@ -204,7 +217,7 @@ class FloatingOverlay(
         }
         val params = baseParams(size, size).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = xFor(edge, screenWidth, size, margin)
+            x = xPx
             y = yPx
         }
         val holder = Holder(
@@ -291,31 +304,47 @@ class FloatingOverlay(
     private fun snap(holder: Holder) {
         holder.dragging = false
         val bounds = screenBounds()
-        val centerX = holder.params.x + holder.view.width / 2
-        val centerY = holder.params.y + holder.view.height / 2
-        val edge = snapEdge(centerX, bounds.width())
-        val fraction = clampFraction(centerY, bounds.height())
-        val margin = context.dp(8)
         val size = holder.view.width.coerceAtLeast(1)
+        val margin = context.dp(8)
+        val centerX = holder.params.x + size / 2
+        val centerY = holder.params.y + size / 2
+        val edge = snapEdge(centerX, bounds.width())
+        val edgeName = if (edge == ScreenEdge.Left) "left" else "right"
+        val dropped = if (holder.spec.placement == PLACE_FREE) {
+            holder.spec.copy(
+                edge = edgeName,
+                xFraction = centerFraction(centerX, bounds.width()),
+                yFraction = centerFraction(centerY, bounds.height()),
+            )
+        } else {
+            holder.spec.copy(
+                edge = edgeName,
+                yFraction = clampFraction(centerY, bounds.height()),
+                xFraction = if (edge == ScreenEdge.Left) 0.08f else 0.92f,
+            )
+        }
+        val others = specs.map { if (it.id == holder.spec.id) dropped else it }
         val placed = placeButtons(
-            buttons = listOf(
-                holder.spec.copy(
-                    edge = if (edge == ScreenEdge.Left) "left" else "right",
-                    yFraction = fraction,
-                ),
-            ),
+            buttons = others,
             screenWidth = bounds.width(),
             screenHeight = bounds.height(),
-            sizePx = { size },
+            sizePx = { button -> if (button.id == holder.spec.id) size else sizePx(button) },
             topPx = bar("status_bar_height", 24),
             bottomPx = bar("navigation_bar_height", 24),
             marginPx = margin,
-        ).first()
-        holder.params.x = xFor(placed.edge, bounds.width(), size, margin)
+            tucked = folded,
+        ).first { it.id == holder.spec.id }
+        holder.params.x = placed.xPx
         holder.params.y = placed.yPx
+        holder.spec = dropped
         runCatching { wm?.updateViewLayout(holder.view, holder.params) }
-        val edgeName = if (placed.edge == ScreenEdge.Left) "left" else "right"
-        callbacks.onMoved(holder.spec.id, edgeName, fraction)
+        val savedX = centerFraction(placed.xPx + size / 2, bounds.width())
+        val savedY = if (dropped.placement == PLACE_FREE) {
+            centerFraction(placed.yPx + size / 2, bounds.height())
+        } else {
+            clampFraction(placed.yPx + size / 2, bounds.height())
+        }
+        callbacks.onMoved(holder.spec.id, edgeName, savedX, savedY)
     }
 
     private fun detach(holder: Holder) {

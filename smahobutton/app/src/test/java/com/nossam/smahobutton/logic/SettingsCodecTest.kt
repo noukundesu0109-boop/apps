@@ -80,8 +80,25 @@ class SettingsCodecTest {
         assertEquals("ながい文", button.label)
         assertEquals("right", button.edge)
         assertEquals(0.92f, button.yFraction)
+        assertEquals(PLACE_EDGE, button.placement)
         assertEquals(TYPE_NONE, button.tap.type)
         assertEquals(listOf(TYPE_HOME, TYPE_BACK), button.menu.map { it.type })
+    }
+
+    @Test
+    fun oldBackupsStayOnTheEdgeAndFreePlacementRoundTrips() {
+        val old = SettingsJson.decode("""{"buttons":[{"id":"a","edge":"left","yFraction":0.3}]}""")
+        assertEquals(PLACE_EDGE, old.buttons.single().placement)
+        assertEquals("left", old.buttons.single().edge)
+        val free = SettingsSpec(
+            buttons = listOf(
+                ButtonSpec(id = "btn-1", placement = PLACE_FREE, xFraction = 0.33f, yFraction = 0.44f, edge = "left"),
+            ),
+        )
+        val again = SettingsJson.decode(SettingsJson.encode(free))
+        assertEquals(PLACE_FREE, again.buttons.single().placement)
+        assertEquals(0.33f, again.buttons.single().xFraction, 0.001f)
+        assertEquals(0.44f, again.buttons.single().yFraction, 0.001f)
     }
 
     @Test

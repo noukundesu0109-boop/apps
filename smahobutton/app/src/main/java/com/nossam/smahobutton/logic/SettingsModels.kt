@@ -22,6 +22,8 @@ data class ButtonSpec(
     val label: String = "",
     val edge: String = "right",
     val yFraction: Float = 0.58f,
+    val xFraction: Float = 0.92f,
+    val placement: String = PLACE_EDGE,
     val shape: String = SHAPE_CIRCLE,
     val useMenu: Boolean = false,
     val tap: ActionSpec = ActionSpec(),
@@ -145,6 +147,8 @@ val ACTION_CHOICES = listOf(
 const val GESTURE_TAP = "tap"
 const val GESTURE_DOUBLE = "double"
 const val GESTURE_LONG = "long"
+const val PLACE_EDGE = "edge"
+const val PLACE_FREE = "free"
 const val SHAPE_CIRCLE = "circle"
 const val SHAPE_ROBOT = "robot"
 const val SHAPE_ORANGE = "b14"
@@ -256,7 +260,13 @@ fun normalize(spec: SettingsSpec): SettingsSpec {
             icon = if (raw.icon in KNOWN_ICONS) raw.icon else "dot",
             label = raw.label.trim().take(4),
             edge = if (raw.edge == "left") "left" else "right",
-            yFraction = if (raw.yFraction.isNaN()) 0.58f else raw.yFraction.coerceIn(0.08f, 0.92f),
+            yFraction = normalizeFraction(raw.yFraction, 0.58f, raw.placement == PLACE_FREE),
+            xFraction = normalizeFraction(
+                raw.xFraction,
+                if (raw.edge == "left") 0.08f else 0.92f,
+                free = true,
+            ),
+            placement = if (raw.placement == PLACE_FREE) PLACE_FREE else PLACE_EDGE,
             shape = if (SHAPE_CHOICES.any { it.key == raw.shape }) raw.shape else SHAPE_CIRCLE,
             tap = normalizeAction(raw.tap),
             doubleTap = normalizeAction(raw.doubleTap),
@@ -289,6 +299,13 @@ fun normalizeVolumes(list: List<AppVolumeSpec>): List<AppVolumeSpec> {
 }
 
 private fun Float.safeAlpha(): Float = if (isNaN()) 0.72f else coerceIn(0.35f, 1f)
+
+private fun normalizeFraction(raw: Float, fallback: Float, free: Boolean): Float {
+    if (raw.isNaN()) return fallback
+    val lo = if (free) 0.02f else 0.08f
+    val hi = if (free) 0.98f else 0.92f
+    return raw.coerceIn(lo, hi)
+}
 
 object SettingsJson {
     private val json = Json {

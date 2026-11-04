@@ -63,6 +63,8 @@ import com.nossam.smahobutton.logic.ActionChoice
 import com.nossam.smahobutton.logic.ActionSpec
 import com.nossam.smahobutton.logic.ButtonSpec
 import com.nossam.smahobutton.logic.ICONS
+import com.nossam.smahobutton.logic.PLACE_EDGE
+import com.nossam.smahobutton.logic.PLACE_FREE
 import com.nossam.smahobutton.logic.PALETTE
 import com.nossam.smahobutton.logic.SHAPE_CHOICES
 import com.nossam.smahobutton.logic.SettingsSpec
@@ -269,6 +271,36 @@ private fun ButtonCard(
                 )
                 Text("濃い", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            Text("置き方")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = button.placement != PLACE_FREE,
+                    onClick = { onChange { it.copy(placement = PLACE_EDGE) } },
+                    label = { Text("端にくっつく") },
+                )
+                FilterChip(
+                    selected = button.placement == PLACE_FREE,
+                    onClick = {
+                        onChange { current ->
+                            if (current.placement == PLACE_FREE) current
+                            else current.copy(
+                                placement = PLACE_FREE,
+                                xFraction = if (current.edge == "left") 0.08f else 0.92f,
+                            )
+                        }
+                    },
+                    label = { Text("置いた場所で止まる") },
+                )
+            }
+            Text(
+                if (button.placement == PLACE_FREE) {
+                    "離した場所に残ります。"
+                } else {
+                    "離すと、左か右の端にくっつきます。"
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
             Text("マーク")
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ICONS.forEach { icon ->

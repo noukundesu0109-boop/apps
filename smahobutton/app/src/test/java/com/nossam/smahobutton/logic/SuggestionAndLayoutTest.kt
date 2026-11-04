@@ -100,6 +100,112 @@ class SuggestionAndLayoutTest {
     }
 
     @Test
+    fun aFreeButtonStaysWhereItWasDropped() {
+        val placed = placeButtons(
+            buttons = listOf(
+                ButtonSpec(id = "free", placement = PLACE_FREE, xFraction = 0.4f, yFraction = 0.35f),
+            ),
+            screenWidth = 1000,
+            screenHeight = 2000,
+            sizePx = { 100 },
+            topPx = 80,
+            bottomPx = 60,
+            marginPx = 10,
+        )
+        val button = placed.single()
+        assertTrue(button.free)
+        assertEquals(350, button.xPx)
+        assertEquals(650, button.yPx)
+        assertTrue(button.xPx > 10)
+        assertTrue(button.yPx >= 80)
+    }
+
+    @Test
+    fun freeButtonsStayClearOfTheStatusAndNavigationBars() {
+        val placed = placeButtons(
+            buttons = listOf(
+                ButtonSpec(id = "high", placement = PLACE_FREE, xFraction = 0.02f, yFraction = 0.02f),
+                ButtonSpec(id = "low", placement = PLACE_FREE, xFraction = 0.98f, yFraction = 0.98f),
+            ),
+            screenWidth = 1000,
+            screenHeight = 2000,
+            sizePx = { 100 },
+            topPx = 80,
+            bottomPx = 60,
+            marginPx = 10,
+        )
+        val high = placed.first { it.id == "high" }
+        val low = placed.first { it.id == "low" }
+        assertTrue(high.yPx >= 90)
+        assertTrue(high.xPx >= 10)
+        assertTrue(low.yPx + low.sizePx <= 2000 - 60 - 10)
+        assertTrue(low.xPx + low.sizePx <= 1000 - 10)
+    }
+
+    @Test
+    fun onlyExactOverlapIsSeparated() {
+        val same = placeButtons(
+            buttons = listOf(
+                ButtonSpec(id = "a", placement = PLACE_FREE, xFraction = 0.5f, yFraction = 0.5f),
+                ButtonSpec(id = "b", placement = PLACE_FREE, xFraction = 0.5f, yFraction = 0.5f),
+            ),
+            screenWidth = 1000,
+            screenHeight = 2000,
+            sizePx = { 100 },
+            topPx = 0,
+            bottomPx = 0,
+            marginPx = 8,
+        )
+        assertTrue(kotlin.math.abs(same[0].yPx - same[1].yPx) > 4 || kotlin.math.abs(same[0].xPx - same[1].xPx) > 4)
+        val near = placeButtons(
+            buttons = listOf(
+                ButtonSpec(id = "a", placement = PLACE_FREE, xFraction = 0.40f, yFraction = 0.40f),
+                ButtonSpec(id = "b", placement = PLACE_FREE, xFraction = 0.48f, yFraction = 0.46f),
+            ),
+            screenWidth = 1000,
+            screenHeight = 2000,
+            sizePx = { 80 },
+            topPx = 0,
+            bottomPx = 0,
+            marginPx = 8,
+        )
+        assertEquals((0.48f * 1000 - 40).toInt(), near.first { it.id == "b" }.xPx)
+    }
+
+    @Test
+    fun foldingParksAFreeButtonOnTheNearestEdgeAndRestoresIt() {
+        val button = ButtonSpec(id = "free", placement = PLACE_FREE, xFraction = 0.3f, yFraction = 0.6f)
+        val args = listOf(button)
+        val parked = placeButtons(args, 1000, 2000, { 100 }, 40, 40, 10, tucked = true).single()
+        assertEquals(ScreenEdge.Left, parked.edge)
+        assertEquals(xFor(ScreenEdge.Left, 1000, 100, 10), parked.xPx)
+        val back = placeButtons(args, 1000, 2000, { 100 }, 40, 40, 10, tucked = false).single()
+        assertEquals((0.3f * 1000 - 50).toInt(), back.xPx)
+        assertTrue(back.free)
+    }
+
+    @Test
+    fun theMenuOpensTowardTheOpenSideAndStaysOnScreen() {
+        val fromLeft = menuFan(1, menuCenterDegrees(120f, 1000f, 1000f, 2000f), 100f)
+        assertTrue(fromLeft.single().first > 0f)
+        val fromTopRight = menuFan(1, menuCenterDegrees(900f, 80f, 1000f, 2000f), 100f)
+        assertTrue(fromTopRight.single().first < 0f)
+        assertTrue(fromTopRight.single().second > 0f)
+        val clamped = placeMenuItems(
+            count = 3,
+            anchorX = 12f,
+            anchorY = 12f,
+            screenWidth = 400,
+            screenHeight = 800,
+            itemSize = 64,
+            radius = 220f,
+            margin = 8,
+        )
+        assertEquals(3, clamped.size)
+        assertTrue(clamped.all { it.first in 8..328 && it.second in 8..728 })
+    }
+
+    @Test
     fun menuFansAwayFromTheEdge() {
         val right = menuOffsets(3, ScreenEdge.Right, 100f)
         assertTrue(right.all { it.first < 0f })
