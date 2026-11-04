@@ -396,9 +396,15 @@ fun normalizeDevices(devices: List<DeviceVolume>, legacyCarVolume: Int?): List<D
 fun volumeForDevice(phone: Int, devices: List<DeviceVolume>, output: OutputSlot): Int {
     if (!output.bluetooth) return phone
     devices.firstOrNull { it.key == output.key }?.let { return it.volume }
+    if (output.name.isNotBlank()) {
+        devices.firstOrNull { it.key != LEGACY_BLUETOOTH_KEY && sameDeviceName(it.name, output.name) }
+            ?.let { return it.volume }
+    }
     if (output.key != LEGACY_BLUETOOTH_KEY) {
         devices.firstOrNull { it.key == LEGACY_BLUETOOTH_KEY }?.let { return it.volume }
     }
+    val specific = devices.filter { it.key != LEGACY_BLUETOOTH_KEY && it.key.isNotBlank() }
+    if (specific.size == 1) return specific.single().volume
     return phone
 }
 

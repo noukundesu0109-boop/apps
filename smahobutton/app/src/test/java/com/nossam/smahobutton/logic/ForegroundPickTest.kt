@@ -28,6 +28,8 @@ class ForegroundPickTest {
         assertTrue(isPrimeVideo(prime))
         assertTrue(isPrimeVideo("com.amazon.avod"))
         assertTrue(isPrimeVideo("com.amazon.amazonvideo.livingroom"))
+        assertTrue(isPrimeVideo("com.amazon.firebat"))
+        assertTrue(isPrimeVideo("com.amazon.avod.playbackclient"))
         assertTrue(isPrimeVideo("com.example.video", "プライムビデオ"))
         assertTrue(isPrimeVideo("com.example.video", "Amazon Prime Video"))
         assertFalse(isPrimeVideo("com.amazon.mShop.android.shopping", "Amazon"))
@@ -157,6 +159,32 @@ class ForegroundPickTest {
             config = filter,
         )
         assertNull(picked)
+    }
+
+    @Test
+    fun aPrimeSplashUsesTheSavedPrimePackage() {
+        val saved = listOf("com.amazon.avod.thirdpartyclient", "com.google.android.youtube")
+        assertEquals(
+            "com.amazon.avod.thirdpartyclient",
+            canonicalVolumePackage("com.amazon.firebat", saved),
+        )
+        assertEquals(
+            "com.amazon.avod.thirdpartyclient",
+            canonicalVolumePackage("com.amazon.avod.playbackclient", saved),
+        )
+        assertEquals(
+            "com.amazon.avod.thirdpartyclient",
+            canonicalVolumePackage("com.example.player", saved, "Prime Video"),
+        )
+        assertEquals("com.google.android.youtube", canonicalVolumePackage("com.google.android.youtube", saved))
+        assertEquals(
+            "com.google.android.apps.youtube.music",
+            canonicalVolumePackage("com.google.android.apps.youtube.music", saved),
+        )
+        assertEquals(
+            "jp.hamitv.hamiand1",
+            canonicalVolumePackage("jp.co.tver.tvapp", listOf("jp.hamitv.hamiand1")),
+        )
     }
 
     private fun window(

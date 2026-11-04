@@ -114,6 +114,37 @@ class ForegroundVolumeTest {
     }
 
     @Test
+    fun theSameAppCanBeForcedToApplyAgainWithoutRecapturingTheBaseline() {
+        val saved = mapOf("com.google.android.youtube" to 3)
+        val first = applyForeground(VolumeMemory(), "com.google.android.youtube", 10, saved, true, outputKey = "mac:AA")
+        assertEquals(3, first.setVolume)
+        val quiet = applyForeground(first.memory, "com.google.android.youtube", 9, saved, true, outputKey = "mac:AA")
+        assertNull(quiet.setVolume)
+        val again = applyForeground(
+            first.memory,
+            "com.google.android.youtube",
+            9,
+            saved,
+            true,
+            outputKey = "mac:AA",
+            force = true,
+        )
+        assertEquals(3, again.setVolume)
+        assertEquals(10, again.memory.baseline)
+        assertEquals("com.google.android.youtube", again.memory.managedPackage)
+    }
+
+    @Test
+    fun openingTheSavedAppAgainAppliesAgain() {
+        val coord = ForegroundVolumeCoordinator(windowMs = 100)
+        val saved = mapOf("com.google.android.youtube" to 3)
+        assertEquals(3, coord.pollAfter("com.google.android.youtube", 0, 10, saved, true).setVolume)
+        val home = coord.pollAfter("com.google.android.apps.nexuslauncher", 500, 3, saved, true)
+        assertEquals(10, home.setVolume)
+        assertEquals(3, coord.pollAfter("com.google.android.youtube", 1000, 10, saved, true).setVolume)
+    }
+
+    @Test
     fun stayingInTheSameAppDoesNotRecaptureTheBaseline() {
         val first = applyForeground(VolumeMemory(), "com.google.android.youtube", 10, mapOf("com.google.android.youtube" to 3), true)
         val again = applyForeground(first.memory, "com.google.android.youtube", 5, mapOf("com.google.android.youtube" to 3), true)
@@ -156,6 +187,43 @@ class ForegroundVolumeTest {
         assertEquals(9, volumeForDevice(8, devices, car))
         assertEquals(8, volumeForDevice(8, devices, PHONE_SLOT))
         assertEquals(8, volumeForDevice(8, emptyList(), car))
+    }
+
+    @Test
+    fun aRenamedBluetoothKeyStillMatchesTheSavedName() {
+        val saved = listOf(DeviceVolume("mac:11:22:33:44:55:66", "EarFun Clip", 12))
+        val now = OutputSlot("mac:AA:BB:CC:DD:EE:FF", "EarFun Clip", bluetooth = true)
+        assertEquals(12, volumeForDevice(4, saved, now))
+        val only = OutputSlot("name:Other", "Other", bluetooth = true)
+        assertEquals(12, volumeForDevice(4, saved, only))
+        val two = listOf(
+            DeviceVolume("mac:11:22:33:44:55:66", "EarFun Clip", 12),
+            DeviceVolume("mac:AA:BB:CC:DD:EE:FF", "Car", 3),
+        )
+        val unknown = OutputSlot("mac:01:02:03:04:05:06", "Other", bluetooth = true)
+        assertEquals(4, volumeForDevice(4, two, unknown))
+    }
+
+    @Test
+    fun connectedOutputsPreferTheSavedBluetoothDevice() {
+        val car = RawAudioDevice(DEVICE_BLUETOOTH_A2DP, "11:11:11:11:11:11", "Car")
+        val buds = RawAudioDevice(DEVICE_BLE_HEADSET, "aa:bb:cc:dd:ee:ff", "EarFun Clip")
+        val picked = resolveOutput(listOf(car, buds), knownKeys = setOf("mac:AA:BB:CC:DD:EE:FF"))
+        assertEquals("mac:AA:BB:CC:DD:EE:FF", picked.key)
+        assertEquals("EarFun Clip", picked.name)
+        assertEquals("mac:11:11:11:11:11:11", resolveOutput(listOf(buds, car)).key)
+        val byName = resolveOutput(listOf(car, buds), knownNames = setOf("EarFun Clip"))
+        assertEquals("EarFun Clip", byName.name)
+    }
+
+    @Test
+    fun theVolumeScreenLineShowsTheLastApply() {
+        assertEquals("さいごに合わせた: まだありません", volumeApplyLine(null))
+        assertEquals(
+            "さいごに合わせた: Prime Video / EarFun Clip / 12 / 19:42:01",
+            volumeApplyLine(VolumeApplyNote("Prime Video", "EarFun Clip", 12, "19:42:01")),
+        )
+        assertEquals(longArrayOf(500L, 1500L, 3000L).toList(), VOLUME_REINFORCE_AT_MS.toList())
     }
 
     @Test

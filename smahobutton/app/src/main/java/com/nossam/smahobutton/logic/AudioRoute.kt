@@ -30,11 +30,41 @@ fun isBluetoothMedia(type: Int): Boolean =
         type == DEVICE_BLE_SPEAKER ||
         type == DEVICE_BLE_BROADCAST
 
-/** Phone speaker and wired outputs stay on the スマホ slot. Bluetooth media gets its own slot. */
-fun resolveOutput(devices: List<RawAudioDevice>): OutputSlot {
-    val bluetooth = devices.firstOrNull { isBluetoothMedia(it.type) } ?: return PHONE_SLOT
-    val mac = usableMac(bluetooth.address)
-    val product = bluetooth.productName?.trim()?.takeIf { it.isNotEmpty() && !it.equals(GENERIC_BLUETOOTH_NAME, true) }
+fun sameDeviceName(a: String, b: String): Boolean {
+    val left = a.trim().lowercase().replace(" ", "")
+    val right = b.trim().lowercase().replace(" ", "")
+    return left.isNotEmpty() && left == right
+}
+
+/**
+ * Phone speaker and wired outputs stay on the スマホ slot. Bluetooth media gets its own slot.
+ * When several Bluetooth outputs are connected, a key or name the user already saved wins.
+ * A2DP is preferred over LE Audio when nothing saved matches.
+ */
+fun resolveOutput(
+    devices: List<RawAudioDevice>,
+    knownKeys: Set<String> = emptySet(),
+    knownNames: Set<String> = emptySet(),
+): OutputSlot {
+    val bluetooth = devices.filter { isBluetoothMedia(it.type) }.sortedBy { bluetoothRank(it.type) }
+    if (bluetooth.isEmpty()) return PHONE_SLOT
+    val slots = bluetooth.map { slotFor(it) }
+    slots.firstOrNull { it.key in knownKeys }?.let { return it }
+    slots.firstOrNull { slot -> knownNames.any { sameDeviceName(it, slot.name) } }?.let { return it }
+    return slots.first()
+}
+
+private fun bluetoothRank(type: Int): Int = when (type) {
+    DEVICE_BLUETOOTH_A2DP -> 0
+    DEVICE_BLE_HEADSET -> 1
+    DEVICE_BLE_SPEAKER -> 2
+    DEVICE_BLE_BROADCAST -> 3
+    else -> 9
+}
+
+private fun slotFor(device: RawAudioDevice): OutputSlot {
+    val mac = usableMac(device.address)
+    val product = device.productName?.trim()?.takeIf { it.isNotEmpty() && !it.equals(GENERIC_BLUETOOTH_NAME, true) }
     val key = when {
         mac != null -> "mac:$mac"
         product != null -> "name:$product"

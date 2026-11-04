@@ -88,11 +88,14 @@ fun applyForeground(
     restoreOnLeave: Boolean,
     outputKey: String = "",
     launcherPackages: Set<String> = emptySet(),
+    force: Boolean = false,
 ): VolumeChange {
     // Home is a real leave, but a saved launcher row must never be applied.
     val leaving = isLauncherPackage(packageName, launcherPackages)
     if (!leaving && packageName == memory.managedPackage) {
-        if (outputKey == memory.outputKey) return VolumeChange(memory)
+        // Same package and same output already applied. force is for the retries after
+        // playback starts, when the app or Bluetooth absolute volume has put the old level back.
+        if (!force && outputKey == memory.outputKey) return VolumeChange(memory)
         val switched = saved[packageName]
         return if (switched != null) {
             VolumeChange(memory.copy(outputKey = outputKey), switched)
@@ -115,6 +118,21 @@ data class VolumeOutcome(
     val changedPackage: String? = null,
     val setVolume: Int? = null,
 )
+
+/** Re-apply after the app is foreground, measured from the moment it settled. */
+val VOLUME_REINFORCE_AT_MS: LongArray = longArrayOf(500L, 1500L, 3000L)
+
+data class VolumeApplyNote(
+    val appName: String,
+    val deviceName: String,
+    val volume: Int,
+    val clock: String,
+)
+
+fun volumeApplyLine(note: VolumeApplyNote?): String {
+    if (note == null) return "さいごに合わせた: まだありません"
+    return "さいごに合わせた: ${note.appName} / ${note.deviceName} / ${note.volume} / ${note.clock}"
+}
 
 class ForegroundVolumeCoordinator(val windowMs: Long = 450L) {
     private val debounce = ForegroundDebounce(windowMs)

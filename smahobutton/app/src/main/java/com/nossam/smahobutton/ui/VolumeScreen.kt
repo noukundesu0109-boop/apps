@@ -25,6 +25,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +41,8 @@ import com.nossam.smahobutton.logic.AppVolumeSpec
 import com.nossam.smahobutton.logic.DeviceVolume
 import com.nossam.smahobutton.logic.SettingsSpec
 import com.nossam.smahobutton.logic.suggestApps
+import com.nossam.smahobutton.logic.volumeApplyLine
+import com.nossam.smahobutton.runtime.SmahoRuntime
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -59,6 +62,7 @@ fun VolumeScreen(
         installed = withContext(Dispatchers.Default) { InstalledApps.load(context) }
     }
     val saved = settings.appVolumes.map { it.packageName }.toSet()
+    val lastApply by SmahoRuntime.lastApply.collectAsState()
     val suggestions = remember(installed, saved) { suggestApps(installed, saved) }
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -98,6 +102,13 @@ fun VolumeScreen(
                         )
                     }
                 }
+            }
+            item {
+                Text(
+                    volumeApplyLine(lastApply),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
             if (suggestions.isNotEmpty()) {
                 item { Text("おすすめ", style = MaterialTheme.typography.titleMedium) }

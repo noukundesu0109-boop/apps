@@ -61,6 +61,30 @@ fun isLauncherPackage(
     return label?.trim().equals("Pixel Launcher", ignoreCase = true)
 }
 
+/**
+ * Apps that share one saved volume. A splash, player, or store-specific id
+ * maps back to the package the user actually saved.
+ */
+fun volumeFamily(packageName: String, label: String? = null): String? {
+    val pkg = packageName.trim()
+    if (pkg.isEmpty()) return null
+    val lower = pkg.lowercase()
+    if (lower == "com.google.android.apps.youtube.music" || lower.startsWith("com.google.android.apps.youtube.music.")) {
+        return "ytmusic"
+    }
+    if (lower == "com.google.android.youtube" || lower.startsWith("com.google.android.youtube.")) return "youtube"
+    if (isTver(InstalledApp(pkg, label.orEmpty()))) return "tver"
+    if (isPrimeVideo(pkg, label)) return "prime"
+    return null
+}
+
+fun canonicalVolumePackage(packageName: String, saved: Collection<String>, label: String? = null): String {
+    val pkg = packageName.trim()
+    if (pkg.isEmpty() || pkg in saved) return pkg
+    val family = volumeFamily(pkg, label) ?: return pkg
+    return saved.firstOrNull { volumeFamily(it) == family } ?: pkg
+}
+
 fun isPrimeVideo(packageName: String?, label: String? = null): Boolean {
     val pkg = packageName?.trim().orEmpty()
     val lower = pkg.lowercase()
@@ -68,6 +92,7 @@ fun isPrimeVideo(packageName: String?, label: String? = null): Boolean {
     // Playback stays in the app package (the :player process is not a new package).
     // Sibling ids such as a living-room or regional build still start with these prefixes.
     if (lower.startsWith("com.amazon.avod.") || lower.startsWith("com.amazon.amazonvideo.")) return true
+    if (lower.startsWith("com.amazon.firebat")) return true
     val name = label?.trim().orEmpty()
     if (name.contains("プライムビデオ")) return true
     if (name.contains("prime video", ignoreCase = true)) return true

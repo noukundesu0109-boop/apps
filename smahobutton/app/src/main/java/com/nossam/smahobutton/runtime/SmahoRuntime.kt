@@ -2,9 +2,12 @@ package com.nossam.smahobutton.runtime
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.media.AudioPlaybackConfiguration
+import android.util.Log
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -19,9 +22,15 @@ import com.nossam.smahobutton.logic.ActionSpec
 import com.nossam.smahobutton.logic.ButtonSpec
 import com.nossam.smahobutton.apps.MediaOutput
 import com.nossam.smahobutton.logic.FilterConfig
+import com.nossam.smahobutton.logic.LEGACY_BLUETOOTH_KEY
 import com.nossam.smahobutton.logic.OutputSlot
+import com.nossam.smahobutton.logic.VOLUME_REINFORCE_AT_MS
+import com.nossam.smahobutton.logic.VolumeApplyNote
 import com.nossam.smahobutton.logic.applyForeground
+import com.nossam.smahobutton.logic.canonicalVolumePackage
+import com.nossam.smahobutton.logic.isLauncherPackage
 import com.nossam.smahobutton.logic.volumeForDevice
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.nossam.smahobutton.logic.ForegroundVolumeCoordinator
 import com.nossam.smahobutton.logic.GESTURE_DOUBLE
 import com.nossam.smahobutton.logic.GESTURE_LONG
@@ -43,6 +52,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 object SmahoRuntime {
+    private const val TAG = "SmahoButton"
     private lateinit var app: SmahoApp
     lateinit var repo: SettingsRepository
         private set
@@ -69,19 +79,30 @@ object SmahoRuntime {
         a11yOverlay?.hostContext() ?: accessibility ?: serviceOverlay?.hostContext() ?: app
 
     private var audioHooked = false
+    private var settleJob: Job? = null
+    private var applyingVolume = false
+    val lastApply = MutableStateFlow<VolumeApplyNote?>(null)
     private val audioCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = onOutputChanged()
         override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) = onOutputChanged()
+    }
+    private val playbackCallback = object : AudioManager.AudioPlaybackCallback() {
+        override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>) {
+            val media = configs.any { config ->
+                runCatching { config.audioAttributes.usage == AudioAttributes.USAGE_MEDIA }.getOrDefault(false)
+            }
+            if (media) onPlaybackStarted()
+        }
     }
 
     fun install(application: SmahoApp, repository: SettingsRepository) {
         app = application
         repo = repository
         if (!audioHooked) {
-            app.getSystemService(AudioManager::class.java)?.registerAudioDeviceCallback(
-                audioCallback,
-                Handler(Looper.getMainLooper()),
-            )
+            val audio = app.getSystemService(AudioManager::class.java)
+            val handler = Handler(Looper.getMainLooper())
+            audio?.registerAudioDeviceCallback(audioCallback, handler)
+            audio?.registerAudioPlaybackCallback(playbackCallback, handler)
             audioHooked = true
         }
         scope.launch {
@@ -174,10 +195,16 @@ object SmahoRuntime {
         if (!::app.isInitialized || !::repo.isInitialized) return
         val settings = repo.state.value ?: return
         val audio = app.getSystemService(AudioManager::class.java) ?: return
+        val savedIds = settings.appVolumes.map { it.packageName }
+        val label = packageName?.let { appLabel(it) }
+        val tracked = packageName?.let { canonicalVolumePackage(it, savedIds, label) }
+        if (!packageName.isNullOrBlank() && tracked != packageName) {
+            Log.i(TAG, "foreground $packageName ($label) -> $tracked")
+        }
         val now = SystemClock.uptimeMillis()
-        val output = MediaOutput.current(app)
+        val output = currentOutput(settings)
         val outcome = coordinator.onWindow(
-            packageName = packageName,
+            packageName = tracked,
             now = now,
             currentVolume = audio.getStreamVolume(AudioManager.STREAM_MUSIC),
             saved = resolvedVolumes(settings, output),
@@ -185,8 +212,9 @@ object SmahoRuntime {
             filter = currentFilter(),
             outputKey = output.key,
         )
-        applyVolume(outcome.setVolume)
+        deliver(outcome, output, "window")
         schedulePoll()
+        armSettle()
         if (pendingShutter && isCameraPackage(packageName)) {
             pendingShutter = false
             scope.launch {
@@ -341,7 +369,7 @@ object SmahoRuntime {
             delay(wait.coerceAtLeast(1L))
             val settings = repo.state.value ?: return@launch
             val audio = app.getSystemService(AudioManager::class.java) ?: return@launch
-            val output = MediaOutput.current(app)
+            val output = currentOutput(settings)
             val outcome = coordinator.poll(
                 now = SystemClock.uptimeMillis(),
                 currentVolume = audio.getStreamVolume(AudioManager.STREAM_MUSIC),
@@ -349,14 +377,38 @@ object SmahoRuntime {
                 restoreOnLeave = settings.restoreVolumeOnLeave,
                 outputKey = output.key,
             )
-            applyVolume(outcome.setVolume)
+            deliver(outcome, output, "settle")
+        }
+    }
+
+    /** Re-reads the real window a few times, then puts the saved level back if playback changed it. */
+    private fun armSettle() {
+        if (settleJob?.isActive == true) return
+        settleJob = scope.launch {
+            var elapsed = 0L
+            for (mark in VOLUME_REINFORCE_AT_MS) {
+                delay(mark - elapsed)
+                elapsed = mark
+                val probed = accessibility?.let { runCatching { it.probeForeground(null) }.getOrNull() }
+                if (!probed.isNullOrBlank()) onWindowPackage(probed)
+                reinforceNow("settle")
+            }
+        }
+    }
+
+    private fun onPlaybackStarted() {
+        if (applyingVolume || !::app.isInitialized || !::repo.isInitialized) return
+        scope.launch {
+            val probed = accessibility?.let { runCatching { it.probeForeground(null) }.getOrNull() }
+            if (!probed.isNullOrBlank()) onWindowPackage(probed)
+            reinforceNow("playback")
         }
     }
 
     private fun reapplyVolume(settings: SettingsSpec) {
         val packageName = coordinator.confirmedPackage ?: return
         if (coordinator.memory.managedPackage == packageName) return
-        val output = MediaOutput.current(app)
+        val output = currentOutput(settings)
         val saved = resolvedVolumes(settings, output)
         if (packageName !in saved) return
         val audio = app.getSystemService(AudioManager::class.java) ?: return
@@ -370,32 +422,98 @@ object SmahoRuntime {
             launcherPackages = currentFilter().launcherPackages,
         )
         coordinator.memory = change.memory
-        applyVolume(change.setVolume)
+        val label = settings.appVolumes.find { it.packageName == packageName }?.label ?: packageName
+        if (change.setVolume != null && change.memory.managedPackage == packageName) {
+            recordAndSet(change.setVolume, label, output, packageName, "settings")
+        } else {
+            applyVolume(change.setVolume)
+        }
     }
 
     private fun onOutputChanged() {
         if (!::app.isInitialized || !::repo.isInitialized) return
+        reinforceNow("route")
+    }
+
+    private fun reinforceNow(reason: String) {
+        if (!::app.isInitialized || !::repo.isInitialized) return
         val settings = repo.state.value ?: return
         val packageName = coordinator.confirmedPackage ?: return
+        if (isLauncherPackage(packageName, currentFilter().launcherPackages)) return
+        val output = currentOutput(settings)
+        val saved = resolvedVolumes(settings, output)
+        val level = saved[packageName] ?: return
         val audio = app.getSystemService(AudioManager::class.java) ?: return
-        val output = MediaOutput.current(app)
+        Log.i(TAG, "reinforce $reason pkg=$packageName key=${output.key} name=${output.name} level=$level")
         val change = applyForeground(
             memory = coordinator.memory,
             packageName = packageName,
             currentVolume = audio.getStreamVolume(AudioManager.STREAM_MUSIC),
-            saved = resolvedVolumes(settings, output),
+            saved = saved,
             restoreOnLeave = settings.restoreVolumeOnLeave,
             outputKey = output.key,
             launcherPackages = currentFilter().launcherPackages,
+            force = true,
         )
         coordinator.memory = change.memory
-        applyVolume(change.setVolume)
+        val label = settings.appVolumes.find { it.packageName == packageName }?.label ?: packageName
+        recordAndSet(change.setVolume ?: level, label, output, packageName, reason)
+    }
+
+    private fun deliver(outcome: com.nossam.smahobutton.logic.VolumeOutcome, output: OutputSlot, reason: String) {
+        val pkg = coordinator.memory.managedPackage
+        val entry = repo.state.value?.appVolumes?.find { it.packageName == pkg }
+        if (outcome.setVolume != null && pkg != null && entry != null && outcome.changedPackage == pkg) {
+            recordAndSet(outcome.setVolume, entry.label, output, pkg, reason)
+        } else {
+            applyVolume(outcome.setVolume)
+        }
+    }
+
+    private fun currentOutput(settings: SettingsSpec): OutputSlot {
+        val keys = linkedSetOf<String>()
+        val names = linkedSetOf<String>()
+        for (appVolume in settings.appVolumes) {
+            for (device in appVolume.devices) {
+                if (device.key.isBlank() || device.key == LEGACY_BLUETOOTH_KEY) continue
+                keys += device.key
+                if (device.name.isNotBlank()) names += device.name
+            }
+        }
+        return MediaOutput.current(app, keys, names)
     }
 
     private fun resolvedVolumes(settings: SettingsSpec, output: OutputSlot): Map<String, Int> =
         settings.appVolumes.associate {
             it.packageName to volumeForDevice(it.volume, it.devices, output)
         }
+
+    private fun recordAndSet(
+        volume: Int?,
+        appName: String,
+        output: OutputSlot,
+        packageName: String,
+        reason: String,
+    ) {
+        if (volume == null || applyingVolume) return
+        val audio = app.getSystemService(AudioManager::class.java) ?: return
+        val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val target = volume.coerceIn(0, max)
+        val clock = java.text.SimpleDateFormat("H:mm:ss", java.util.Locale.JAPAN).format(java.util.Date())
+        lastApply.value = VolumeApplyNote(
+            appName = appName.ifBlank { packageName },
+            deviceName = output.name,
+            volume = target,
+            clock = clock,
+        )
+        Log.i(TAG, "apply $reason $packageName ${output.name} key=${output.key} -> $target")
+        applyingVolume = true
+        try {
+            applyVolume(target)
+        } finally {
+            applyingVolume = false
+        }
+    }
 
     private fun applyVolume(volume: Int?) {
         if (volume == null) return
@@ -405,7 +523,8 @@ object SmahoRuntime {
         if (audio.getStreamVolume(AudioManager.STREAM_MUSIC) == target) return
         try {
             audio.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            Log.w(TAG, "setStreamVolume failed", error)
         }
     }
 
