@@ -12,6 +12,7 @@ import android.view.View
 import android.view.ViewOutlineProvider
 import com.nossam.smahobutton.dp
 import com.nossam.smahobutton.logic.ButtonSpec
+import com.nossam.smahobutton.logic.SHAPE_ORANGE
 import com.nossam.smahobutton.logic.SHAPE_ROBOT
 import com.nossam.smahobutton.logic.paletteArgb
 import com.nossam.smahobutton.logic.prefersDarkInk
@@ -68,13 +69,8 @@ class RoundButtonView(context: Context) : View(context) {
 
     fun hit(x: Float, y: Float): Boolean {
         if (width <= 0 || height <= 0) return false
-        return if (spec.shape == SHAPE_ROBOT) {
-            val region = Region()
-            region.setPath(
-                robotOutline(width.toFloat()),
-                Region(0, 0, width, height),
-            )
-            region.contains(x.toInt(), y.toInt())
+        return if (spec.shape == SHAPE_ROBOT || ButtonShapes.isBlob(spec.shape)) {
+            inside(touchPath(), x, y)
         } else {
             val cx = width / 2f
             val cy = height / 2f
@@ -82,16 +78,27 @@ class RoundButtonView(context: Context) : View(context) {
         }
     }
 
-    fun touchPath(): Path = if (spec.shape == SHAPE_ROBOT && width > 0) {
-        robotOutline(width.toFloat())
-    } else {
-        Path().apply { addCircle(width / 2f, height / 2f, width / 2f, Path.Direction.CW) }
+    fun touchPath(): Path = when {
+        width <= 0 -> Path()
+        spec.shape == SHAPE_ROBOT -> robotOutline(width.toFloat())
+        ButtonShapes.isBlob(spec.shape) -> ButtonShapes.silhouette(spec.shape, width.toFloat())
+        else -> Path().apply { addCircle(width / 2f, height / 2f, width / 2f, Path.Direction.CW) }
+    }
+
+    private fun inside(path: Path, x: Float, y: Float): Boolean {
+        val region = Region()
+        region.setPath(path, Region(0, 0, width, height))
+        return region.contains(x.toInt(), y.toInt())
     }
 
     override fun onDraw(canvas: Canvas) {
         if (width <= 0 || height <= 0) return
         if (spec.shape == SHAPE_ROBOT) {
             drawRobot(canvas, width.toFloat())
+            return
+        }
+        if (ButtonShapes.isBlob(spec.shape)) {
+            drawBlob(canvas, width.toFloat())
             return
         }
         val cx = width / 2f
@@ -108,6 +115,36 @@ class RoundButtonView(context: Context) : View(context) {
         } else {
             drawIcon(canvas, spec.icon, cx, cy, radius)
         }
+    }
+
+    private fun drawBlob(canvas: Canvas, size: Float) {
+        val body = if (spec.shape == SHAPE_ORANGE) 0xFFFF6A00.toInt() else paletteArgb(spec.color).toInt()
+        fill.color = body
+        canvas.drawPath(ButtonShapes.silhouette(spec.shape, size), fill)
+        if (spec.shape == SHAPE_ORANGE) {
+            fill.color = 0xFF3A2414.toInt()
+            canvas.drawRoundRect(
+                size * 0.46f,
+                size * 0.08f,
+                size * 0.54f,
+                size * 0.22f,
+                size * 0.03f,
+                size * 0.03f,
+                fill,
+            )
+            fill.color = 0xFF2E9B4A.toInt()
+            canvas.drawOval(size * 0.52f, size * 0.08f, size * 0.74f, size * 0.20f, fill)
+        }
+        val (dx, dy) = ButtonShapes.eyeShift(spec.shape)
+        fill.color = Color.WHITE
+        val eyeW = size * 0.055f
+        val eyeH = size * 0.15f
+        val gap = size * 0.04f
+        val cx = size * 0.50f + dx * size
+        val cy = size * 0.48f + dy * size
+        val radius = eyeW / 2f
+        canvas.drawRoundRect(cx - gap - eyeW, cy - eyeH / 2f, cx - gap, cy + eyeH / 2f, radius, radius, fill)
+        canvas.drawRoundRect(cx + gap, cy - eyeH / 2f, cx + gap + eyeW, cy + eyeH / 2f, radius, radius, fill)
     }
 
     private fun drawRobot(canvas: Canvas, size: Float) {

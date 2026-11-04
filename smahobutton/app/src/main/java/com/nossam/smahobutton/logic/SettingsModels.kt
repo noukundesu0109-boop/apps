@@ -31,11 +31,19 @@ data class ButtonSpec(
 )
 
 @Serializable
+data class DeviceVolume(
+    val key: String,
+    val name: String = "",
+    val volume: Int = 0,
+)
+
+@Serializable
 data class AppVolumeSpec(
     val packageName: String,
     val label: String = "",
     val volume: Int = 0,
     val carVolume: Int? = null,
+    val devices: List<DeviceVolume> = emptyList(),
 )
 
 @Serializable
@@ -49,13 +57,24 @@ data class SettingsSpec(
 data class PaletteColor(val key: String, val argb: Long, val name: String)
 
 val PALETTE = listOf(
+    PaletteColor("ink", 0xFF000000, "くろ"),
+    PaletteColor("brown", 0xFF8B5E3C, "ちゃ"),
+    PaletteColor("hot", 0xFFF0283C, "あか"),
+    PaletteColor("flame", 0xFFFF6A0A, "あか橙"),
+    PaletteColor("amber", 0xFFFFA000, "きいろ"),
+    PaletteColor("mint", 0xFF14C873, "みどり"),
+    PaletteColor("aqua", 0xFF14B4AA, "みず"),
+    PaletteColor("sky", 0xFF1E82F0, "あお"),
+    PaletteColor("violet", 0xFF9B5AF5, "すみれ"),
+    PaletteColor("magenta", 0xFFF03CA0, "ピンク"),
+    PaletteColor("silver", 0xFF828282, "はいいろ"),
     PaletteColor("blue", 0xFF1E88E5, "青"),
     PaletteColor("red", 0xFFE53935, "赤"),
     PaletteColor("green", 0xFF43A047, "緑"),
     PaletteColor("orange", 0xFFFB8C00, "オレンジ"),
     PaletteColor("purple", 0xFF8E24AA, "むらさき"),
     PaletteColor("teal", 0xFF00897B, "青緑"),
-    PaletteColor("pink", 0xFFD81B60, "ピンク"),
+    PaletteColor("pink", 0xFFD81B60, "もも"),
     PaletteColor("gray", 0xFF546E7A, "グレー"),
 )
 
@@ -113,6 +132,28 @@ const val GESTURE_DOUBLE = "double"
 const val GESTURE_LONG = "long"
 const val SHAPE_CIRCLE = "circle"
 const val SHAPE_ROBOT = "robot"
+const val SHAPE_ORANGE = "b14"
+
+data class ShapeChoice(val key: String, val name: String)
+
+val SHAPE_CHOICES = listOf(
+    ShapeChoice(SHAPE_CIRCLE, "まる"),
+    ShapeChoice(SHAPE_ROBOT, "ロボット"),
+    ShapeChoice("b1", "たま"),
+    ShapeChoice("b2", "くも"),
+    ShapeChoice("b3", "しかく"),
+    ShapeChoice("b4", "ほし"),
+    ShapeChoice("b5", "はな"),
+    ShapeChoice("b6", "むにゅ"),
+    ShapeChoice("b7", "おはな"),
+    ShapeChoice("b8", "しずく"),
+    ShapeChoice("b9", "まめ"),
+    ShapeChoice("b10", "さんかく"),
+    ShapeChoice("b11", "ごかく"),
+    ShapeChoice("b12", "とげ"),
+    ShapeChoice("b13", "はちかく"),
+    ShapeChoice(SHAPE_ORANGE, "みかん"),
+)
 
 fun defaultButton(index: Int): ButtonSpec {
     val spots = listOf(0.58f, 0.40f, 0.74f, 0.26f, 0.88f)
@@ -153,7 +194,8 @@ fun actionShort(action: ActionSpec): String = when (action.type) {
     else -> "なし"
 }
 
-fun paletteArgb(key: String): Long = PALETTE.firstOrNull { it.key == key }?.argb ?: PALETTE.first().argb
+fun paletteArgb(key: String): Long =
+    PALETTE.firstOrNull { it.key == key }?.argb ?: PALETTE.first { it.key == "blue" }.argb
 
 private val KNOWN_TYPES = ACTION_CHOICES.map { it.type }.toSet()
 private val KNOWN_ICONS = ICONS.map { it.key }.toSet()
@@ -192,7 +234,7 @@ fun normalize(spec: SettingsSpec): SettingsSpec {
             label = raw.label.trim().take(4),
             edge = if (raw.edge == "left") "left" else "right",
             yFraction = if (raw.yFraction.isNaN()) 0.58f else raw.yFraction.coerceIn(0.08f, 0.92f),
-            shape = if (raw.shape == SHAPE_ROBOT) SHAPE_ROBOT else SHAPE_CIRCLE,
+            shape = if (SHAPE_CHOICES.any { it.key == raw.shape }) raw.shape else SHAPE_CIRCLE,
             tap = normalizeAction(raw.tap),
             doubleTap = normalizeAction(raw.doubleTap),
             longPress = normalizeAction(raw.longPress),
@@ -211,7 +253,8 @@ fun normalizeVolumes(list: List<AppVolumeSpec>): List<AppVolumeSpec> {
             packageName = pkg,
             label = item.label.trim().ifEmpty { pkg }.take(40),
             volume = item.volume.coerceIn(0, 200),
-            carVolume = item.carVolume?.coerceIn(0, 200),
+            carVolume = null,
+            devices = normalizeDevices(item.devices, item.carVolume),
         )
     }
     return map.values.toList()
@@ -282,8 +325,34 @@ data class RememberResult(
     val updated: List<AppVolumeSpec>,
 )
 
-fun volumeForOutput(phone: Int, car: Int?, carOutput: Boolean): Int =
-    if (carOutput && car != null) car else phone
+fun normalizeDevices(devices: List<DeviceVolume>, legacyCarVolume: Int?): List<DeviceVolume> {
+    val cleaned = linkedMapOf<String, DeviceVolume>()
+    for (device in devices) {
+        val key = device.key.trim()
+        if (key.isEmpty()) continue
+        val name = device.name.trim().ifEmpty {
+            if (key == LEGACY_BLUETOOTH_KEY) LEGACY_BLUETOOTH_NAME else key
+        }.take(40)
+        cleaned[key] = DeviceVolume(key, name, device.volume.coerceIn(0, 200))
+    }
+    if (legacyCarVolume != null && LEGACY_BLUETOOTH_KEY !in cleaned) {
+        cleaned[LEGACY_BLUETOOTH_KEY] = DeviceVolume(
+            LEGACY_BLUETOOTH_KEY,
+            LEGACY_BLUETOOTH_NAME,
+            legacyCarVolume.coerceIn(0, 200),
+        )
+    }
+    return cleaned.values.toList()
+}
+
+fun volumeForDevice(phone: Int, devices: List<DeviceVolume>, output: OutputSlot): Int {
+    if (!output.bluetooth) return phone
+    devices.firstOrNull { it.key == output.key }?.let { return it.volume }
+    if (output.key != LEGACY_BLUETOOTH_KEY) {
+        devices.firstOrNull { it.key == LEGACY_BLUETOOTH_KEY }?.let { return it.volume }
+    }
+    return phone
+}
 
 /** Light button colors get dark eyes so the face stays readable. */
 fun prefersDarkInk(argb: Long): Boolean {
@@ -301,21 +370,28 @@ fun rememberVolume(
     currentVolume: Int,
     existing: List<AppVolumeSpec>,
     filter: FilterConfig,
-    carOutput: Boolean = false,
+    output: OutputSlot = PHONE_SLOT,
 ): RememberResult {
     if (packageName == null || PackageFilter.isNoise(packageName, filter)) {
         return RememberResult(false, "この画面のアプリは覚えられません", existing)
     }
     val name = (label?.trim()?.takeIf { it.isNotEmpty() } ?: packageName).take(18)
-    val volume = currentVolume.coerceIn(0, 200)
+    val level = currentVolume.coerceIn(0, 200)
     val previous = existing.find { it.packageName == packageName }
+    val device = DeviceVolume(output.key, output.name, level)
     val saved = when {
-        previous == null && carOutput -> AppVolumeSpec(packageName, name, volume, carVolume = volume)
-        previous == null -> AppVolumeSpec(packageName, name, volume, carVolume = null)
-        carOutput -> previous.copy(label = name, carVolume = volume)
-        else -> previous.copy(label = name, volume = volume)
+        previous == null && output.bluetooth ->
+            AppVolumeSpec(packageName, name, level, devices = listOf(device))
+        previous == null ->
+            AppVolumeSpec(packageName, name, level)
+        output.bluetooth ->
+            previous.copy(
+                label = name,
+                devices = previous.devices.filter { it.key != output.key } + device,
+            )
+        else -> previous.copy(label = name, volume = level)
     }
     val next = existing.filter { it.packageName != packageName } + saved
-    val message = if (carOutput) "$name の車の音量を覚えました" else "$name の音量を覚えました"
+    val message = "$name：${output.name} の音量 $level を覚えました"
     return RememberResult(true, message, next)
 }

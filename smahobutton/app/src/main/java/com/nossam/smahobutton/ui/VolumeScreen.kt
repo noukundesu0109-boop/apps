@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.nossam.smahobutton.apps.InstalledApps
 import com.nossam.smahobutton.logic.AppSuggestion
 import com.nossam.smahobutton.logic.AppVolumeSpec
+import com.nossam.smahobutton.logic.DeviceVolume
 import com.nossam.smahobutton.logic.SettingsSpec
 import com.nossam.smahobutton.logic.suggestApps
 import kotlin.math.roundToInt
@@ -124,7 +125,8 @@ fun VolumeScreen(
                     entry = entry,
                     maxVolume = maxVolume,
                     onPhone = { viewModel.setAppVolume(entry.packageName, it) },
-                    onCar = { viewModel.setCarVolume(entry.packageName, it) },
+                    onDevice = { key, level -> viewModel.setDeviceVolume(entry.packageName, key, level) },
+                    onDeleteDevice = { key -> viewModel.removeDeviceVolume(entry.packageName, key) },
                     onRemove = { viewModel.removeAppVolume(entry.packageName) },
                 )
             }
@@ -154,30 +156,28 @@ private fun VolumeRow(
     entry: AppVolumeSpec,
     maxVolume: Int,
     onPhone: (Int) -> Unit,
-    onCar: (Int?) -> Unit,
+    onDevice: (String, Int) -> Unit,
+    onDeleteDevice: (String) -> Unit,
     onRemove: () -> Unit,
 ) {
     var phone by remember(entry.packageName, entry.volume) {
         mutableFloatStateOf(entry.volume.coerceIn(0, maxVolume).toFloat())
     }
-    var car by remember(entry.packageName, entry.carVolume, entry.volume) {
-        mutableFloatStateOf((entry.carVolume ?: entry.volume).coerceIn(0, maxVolume).toFloat())
+    val summary = buildString {
+        append("スマホ ${entry.volume}")
+        entry.devices.forEach { append("、${it.name} ${it.volume}") }
     }
-    val carText = entry.carVolume?.toString() ?: "未設定"
     Card {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AppIcon(entry.packageName)
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(entry.label, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "スマホ ${entry.volume} / 車 $carText",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Text(summary, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 TextButton(onClick = onRemove) { Text("削除") }
             }
-            Text("スマホ", style = MaterialTheme.typography.bodyMedium)
+            Text("スマホ ${phone.roundToInt()}", style = MaterialTheme.typography.bodyMedium)
             Slider(
                 value = phone,
                 onValueChange = { phone = it },
@@ -185,23 +185,43 @@ private fun VolumeRow(
                 valueRange = 0f..maxVolume.toFloat(),
                 steps = (maxVolume - 1).coerceAtLeast(0),
             )
-            Text("車（Bluetooth）", style = MaterialTheme.typography.bodyMedium)
-            Slider(
-                value = car,
-                onValueChange = { car = it },
-                onValueChangeFinished = { onCar(car.roundToInt()) },
-                valueRange = 0f..maxVolume.toFloat(),
-                steps = (maxVolume - 1).coerceAtLeast(0),
-            )
-            if (entry.carVolume != null) {
-                TextButton(onClick = { onCar(null) }) { Text("車はスマホと同じ") }
-            } else {
+            entry.devices.forEach { device ->
+                DeviceSlider(device, maxVolume, onDevice, onDeleteDevice)
+            }
+            if (entry.devices.isEmpty()) {
                 Text(
-                    "車が未設定のときは、スマホの音量を使います。",
+                    "Bluetoothの音量は、つないだ状態で「この画面の音量を覚える」と覚えます。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
     }
+}
+
+@Composable
+private fun DeviceSlider(
+    device: DeviceVolume,
+    maxVolume: Int,
+    onDevice: (String, Int) -> Unit,
+    onDeleteDevice: (String) -> Unit,
+) {
+    var level by remember(device.key, device.volume) {
+        mutableFloatStateOf(device.volume.coerceIn(0, maxVolume).toFloat())
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "${device.name} ${level.roundToInt()}",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        TextButton(onClick = { onDeleteDevice(device.key) }) { Text("消す") }
+    }
+    Slider(
+        value = level,
+        onValueChange = { level = it },
+        onValueChangeFinished = { onDevice(device.key, level.roundToInt()) },
+        valueRange = 0f..maxVolume.toFloat(),
+        steps = (maxVolume - 1).coerceAtLeast(0),
+    )
 }

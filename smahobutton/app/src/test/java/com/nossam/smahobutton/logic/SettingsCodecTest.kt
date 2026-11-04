@@ -110,6 +110,18 @@ class SettingsCodecTest {
             """{"appVolumes":[{"packageName":"com.google.android.youtube","label":"YouTube","volume":4}]}""",
         )
         assertEquals(4, spec.appVolumes.single().volume)
+        assertTrue(spec.appVolumes.single().devices.isEmpty())
+    }
+
+    @Test
+    fun oldCarVolumeBecomesAGenericBluetoothFallback() {
+        val spec = SettingsJson.decode(
+            """{"appVolumes":[{"packageName":"com.a","label":"A","volume":4,"carVolume":9}]}""",
+        )
+        val device = spec.appVolumes.single().devices.single()
+        assertEquals(LEGACY_BLUETOOTH_KEY, device.key)
+        assertEquals(LEGACY_BLUETOOTH_NAME, device.name)
+        assertEquals(9, device.volume)
         assertEquals(null, spec.appVolumes.single().carVolume)
     }
 

@@ -77,10 +77,20 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    fun setCarVolume(packageName: String, volume: Int?) = edit { settings ->
+    fun setDeviceVolume(packageName: String, key: String, volume: Int) = edit { settings ->
         settings.copy(
-            appVolumes = settings.appVolumes.map {
-                if (it.packageName == packageName) it.copy(carVolume = volume) else it
+            appVolumes = settings.appVolumes.map { entry ->
+                if (entry.packageName != packageName) entry
+                else entry.copy(devices = entry.devices.map { if (it.key == key) it.copy(volume = volume) else it })
+            },
+        )
+    }
+
+    fun removeDeviceVolume(packageName: String, key: String) = edit { settings ->
+        settings.copy(
+            appVolumes = settings.appVolumes.map { entry ->
+                if (entry.packageName != packageName) entry
+                else entry.copy(devices = entry.devices.filter { it.key != key })
             },
         )
     }

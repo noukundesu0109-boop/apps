@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -44,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.verticalScroll
@@ -54,8 +56,7 @@ import com.nossam.smahobutton.logic.ActionSpec
 import com.nossam.smahobutton.logic.ButtonSpec
 import com.nossam.smahobutton.logic.ICONS
 import com.nossam.smahobutton.logic.PALETTE
-import com.nossam.smahobutton.logic.SHAPE_CIRCLE
-import com.nossam.smahobutton.logic.SHAPE_ROBOT
+import com.nossam.smahobutton.logic.SHAPE_CHOICES
 import com.nossam.smahobutton.logic.SettingsSpec
 import com.nossam.smahobutton.logic.TYPE_OPEN_APP
 import com.nossam.smahobutton.logic.actionTitle
@@ -175,24 +176,50 @@ private fun ButtonCard(
                 if (canDelete) TextButton(onClick = onDelete) { Text("削除") }
             }
             AndroidView(
-                modifier = Modifier.size(sizeDp(button.size).dp).align(Alignment.CenterHorizontally),
+                modifier = Modifier.size(112.dp).align(Alignment.CenterHorizontally),
                 factory = { RoundButtonView(it) },
                 update = {
-                    it.spec = button.copy(label = label, alpha = alpha)
-                    it.alpha = alpha
+                    it.spec = button.copy(label = label, alpha = 1f, size = "l")
+                    it.alpha = 1f
+                    it.isClickable = false
                 },
             )
-            Text("デザイン")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(SHAPE_CIRCLE to "まる", SHAPE_ROBOT to "ロボット").forEach { (key, name) ->
-                    FilterChip(
-                        selected = button.shape == key,
-                        onClick = { onChange { it.copy(shape = key) } },
-                        label = { Text(name) },
-                    )
+            Text("かたち", style = MaterialTheme.typography.titleSmall)
+            SHAPE_CHOICES.chunked(4).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { choice ->
+                        val selected = button.shape == choice.key
+                        Column(
+                            Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(56.dp)
+                                    .border(
+                                        width = if (selected) 2.dp else 0.dp,
+                                        color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        shape = RoundedCornerShape(12.dp),
+                                    )
+                                    .clickable { onChange { it.copy(shape = choice.key) } },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                AndroidView(
+                                    modifier = Modifier.size(44.dp),
+                                    factory = { RoundButtonView(it) },
+                                    update = {
+                                        it.spec = button.copy(shape = choice.key, label = "", alpha = 1f)
+                                        it.alpha = 1f
+                                        it.isClickable = false
+                                    },
+                                )
+                            }
+                            Text(choice.name, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
                 }
             }
-            Text("色")
+            Text("色", style = MaterialTheme.typography.titleSmall)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PALETTE.forEach { color ->
                     val selected = button.color == color.key

@@ -134,43 +134,58 @@ class ForegroundVolumeTest {
             3,
             mapOf("com.google.android.youtube" to 12),
             true,
-            carOutput = true,
+            outputKey = "mac:AA:BB:CC:DD:EE:FF",
         )
         assertEquals(12, car.setVolume)
         assertEquals(10, car.memory.baseline)
-        assertTrue(car.memory.usingCar)
+        assertEquals("mac:AA:BB:CC:DD:EE:FF", car.memory.outputKey)
     }
 
     @Test
-    fun anUnsetCarVolumeUsesThePhoneLevel() {
-        assertEquals(8, volumeForOutput(8, null, carOutput = true))
-        assertEquals(12, volumeForOutput(8, 12, carOutput = true))
-        assertEquals(8, volumeForOutput(8, 12, carOutput = false))
+    fun aKnownDeviceBeatsTheOldBluetoothFallback() {
+        val devices = listOf(
+            DeviceVolume(LEGACY_BLUETOOTH_KEY, LEGACY_BLUETOOTH_NAME, 9),
+            DeviceVolume("mac:AA:BB:CC:DD:EE:FF", "Pixel Buds", 4),
+        )
+        val buds = OutputSlot("mac:AA:BB:CC:DD:EE:FF", "Pixel Buds", bluetooth = true)
+        val car = OutputSlot("mac:11:22:33:44:55:66", "Car", bluetooth = true)
+        assertEquals(4, volumeForDevice(8, devices, buds))
+        assertEquals(9, volumeForDevice(8, devices, car))
+        assertEquals(8, volumeForDevice(8, devices, PHONE_SLOT))
+        assertEquals(8, volumeForDevice(8, emptyList(), car))
     }
 
     @Test
-    fun rememberInTheCarChangesOnlyTheCarSlot() {
-        val existing = listOf(AppVolumeSpec("com.google.android.youtube", "YouTube", 4, carVolume = 6))
+    fun rememberNamesTheCurrentDevice() {
+        val buds = OutputSlot("mac:AA:BB:CC:DD:EE:FF", "Pixel Buds", bluetooth = true)
+        val existing = listOf(AppVolumeSpec("com.google.android.youtube", "YouTube", 4))
         val saved = rememberVolume(
             "com.google.android.youtube",
             "YouTube",
-            11,
+            7,
             existing,
             filter,
-            carOutput = true,
+            output = buds,
         )
-        assertTrue(saved.ok)
-        assertEquals("YouTube の車の音量を覚えました", saved.message)
+        assertEquals("YouTube：Pixel Buds の音量 7 を覚えました", saved.message)
         assertEquals(4, saved.updated.single().volume)
-        assertEquals(11, saved.updated.single().carVolume)
+        assertEquals(7, saved.updated.single().devices.single().volume)
+        assertEquals("Pixel Buds", saved.updated.single().devices.single().name)
     }
 
     @Test
-    fun bluetoothSpeakersCountAsTheCar() {
-        assertTrue(isCarDeviceType(listOf(DEVICE_BLUETOOTH_A2DP)))
-        assertTrue(isCarDeviceType(listOf(DEVICE_BLE_HEADSET, 2)))
-        assertTrue(isCarDeviceType(listOf(DEVICE_BLE_SPEAKER)))
-        assertTrue(!isCarDeviceType(listOf(2, 3)))
+    fun earbudsUseTheMacAndANamelessDeviceUsesOneBluetoothSlot() {
+        val named = resolveOutput(listOf(RawAudioDevice(DEVICE_BLUETOOTH_A2DP, "aa:bb:cc:dd:ee:ff", "Pixel Buds")))
+        assertEquals("mac:AA:BB:CC:DD:EE:FF", named.key)
+        assertEquals("Pixel Buds", named.name)
+        val byName = resolveOutput(listOf(RawAudioDevice(DEVICE_BLE_HEADSET, "02:00:00:00:00:00", "Car Audio")))
+        assertEquals("name:Car Audio", byName.key)
+        val generic = resolveOutput(listOf(RawAudioDevice(DEVICE_BLE_SPEAKER, "", "Bluetooth")))
+        assertEquals(GENERIC_BLUETOOTH_KEY, generic.key)
+        assertEquals(GENERIC_BLUETOOTH_NAME, generic.name)
+        val broadcast = resolveOutput(listOf(RawAudioDevice(DEVICE_BLE_BROADCAST, null, null)))
+        assertEquals(GENERIC_BLUETOOTH_KEY, broadcast.key)
+        assertEquals(PHONE_SLOT, resolveOutput(listOf(RawAudioDevice(4, null, "Wired"))))
     }
 
     @Test
@@ -184,7 +199,7 @@ class ForegroundVolumeTest {
             filter,
         )
         assertTrue(saved.ok)
-        assertEquals("YouTube の音量を覚えました", saved.message)
+        assertEquals("YouTube：スマホ の音量 7 を覚えました", saved.message)
         assertEquals(7, saved.updated.single().volume)
 
         val blocked = rememberVolume("com.android.systemui", "System", 4, existing, filter)

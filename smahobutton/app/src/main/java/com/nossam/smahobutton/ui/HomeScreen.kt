@@ -84,6 +84,9 @@ fun HomeScreen(
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { revision++ }
+    val bluetoothPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { revision++ }
     val openBackup = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val text = context.readBackupText(uri)
@@ -187,6 +190,17 @@ fun HomeScreen(
                     }
                 },
             )
+            if (Build.VERSION.SDK_INT >= 31) {
+                CheckCard(
+                    title = "Bluetoothの名前",
+                    body = "つないでいる機器の名前を見分けるため。",
+                    done = permissions.bluetooth,
+                    action = "許可する",
+                    onAction = {
+                        bluetoothPermission.launch(android.Manifest.permission.BLUETOOTH_CONNECT)
+                    },
+                )
+            }
             CheckCard(
                 title = "おやすみモード",
                 body = "マナーモードに使います。使わないなら、そのままで大丈夫です。",
@@ -293,7 +307,7 @@ fun HomeScreen(
 }
 
 private val PermissionSnapshot.allGranted: Boolean
-    get() = overlay && accessibility && notifications && dnd && battery
+    get() = overlay && accessibility && notifications && bluetooth && dnd && battery
 
 @Composable
 private fun CheckCard(

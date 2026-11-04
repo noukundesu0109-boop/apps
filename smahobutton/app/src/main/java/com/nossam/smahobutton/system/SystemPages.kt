@@ -17,6 +17,7 @@ data class PermissionSnapshot(
     val overlay: Boolean,
     val accessibility: Boolean,
     val notifications: Boolean,
+    val bluetooth: Boolean,
     val dnd: Boolean,
     val battery: Boolean,
 )
@@ -29,12 +30,19 @@ fun readPermissions(context: Context): PermissionSnapshot {
         ContextCompat.checkSelfPermission(app, android.Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
     }
+    val bluetooth = if (Build.VERSION.SDK_INT < 31) {
+        true
+    } else {
+        ContextCompat.checkSelfPermission(app, android.Manifest.permission.BLUETOOTH_CONNECT) ==
+            PackageManager.PERMISSION_GRANTED
+    }
     val power = app.getSystemService(android.os.PowerManager::class.java)
     val notificationsManager = app.getSystemService(android.app.NotificationManager::class.java)
     return PermissionSnapshot(
         overlay = Settings.canDrawOverlays(app),
         accessibility = isAccessibilityEnabled(app),
         notifications = notifications,
+        bluetooth = bluetooth,
         dnd = notificationsManager?.isNotificationPolicyAccessGranted == true,
         battery = power?.isIgnoringBatteryOptimizations(app.packageName) == true,
     )
