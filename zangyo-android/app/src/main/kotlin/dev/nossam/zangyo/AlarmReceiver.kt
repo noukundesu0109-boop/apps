@@ -16,6 +16,11 @@ internal class AlarmReceiver : BroadcastReceiver() {
         val source = intent.getStringExtra(AlarmIntents.EXTRA_SOURCE)
         Thread {
             try {
+                if (action == AlarmIntents.ACTION_SKIP_NEXT) {
+                    val id = intent.getStringExtra(AlarmIntents.EXTRA_ID).orEmpty()
+                    if (id.startsWith("s|")) AlarmScheduler.setAlarmSkipped(app, id, true)
+                    else AlarmScheduler.reschedule(app)
+                } else {
                 AlarmScheduler.reschedule(app)
                 if (action == AlarmIntents.ACTION_FIRE) {
                     val service = Intent(app, AlarmRingService::class.java).setAction(AlarmIntents.ACTION_FIRE).apply {
@@ -28,6 +33,7 @@ internal class AlarmReceiver : BroadcastReceiver() {
                     } catch (error: Exception) {
                         Log.e(TAG, "could not start the ringing service", error)
                     }
+                }
                 }
             } finally {
                 pending.finish()

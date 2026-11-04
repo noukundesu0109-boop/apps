@@ -33,9 +33,15 @@ class PermissionActivity : AppCompatActivity() {
         }
     }
 
+    private var askedNotifications = false
+
     override fun onResume() {
         super.onResume()
         refresh()
+        if (!askedNotifications && !PermissionGate.notificationsOk(this)) {
+            askedNotifications = true
+            enableNotifications()
+        }
     }
 
     private fun refresh() {

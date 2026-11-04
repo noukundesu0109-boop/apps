@@ -40,6 +40,7 @@
   var weekdayDraft = [];
   var schedule = null;
   var perm = null;
+  var noticeOn = true;
 
   var style = document.createElement("style");
   style.textContent = [
@@ -77,6 +78,8 @@
     ".za-msg{min-height:1.2em;color:#b42318;font-size:14px;margin:8px 0 0}",
     "label.za-field{display:block;margin:10px 0;font-size:14px;color:#6f675c}",
     "label.za-field .za-input{margin-top:4px}",
+    ".za-notice{display:flex;align-items:flex-start;gap:8px;font-size:15px;line-height:1.4;margin:0 0 8px;color:#1c1917}",
+    ".za-notice input{width:18px;height:18px;margin-top:2px}",
     ".za-on{display:flex;align-items:center;gap:4px;font-size:13px;color:#6f675c;min-width:52px}",
     ".za-on input{width:18px;height:18px}",
     ".za-overdot{position:absolute;right:3px;top:3px;width:7px;height:7px;border-radius:50%;background:#1f5c45}",
@@ -165,10 +168,27 @@
     return '<p class="za-warn">まだオフです: ' + esc(missing.join("、")) + "。下の「スマホの許可を確認」を押してください。</p>";
   }
 
+  function readNotice() {
+    try {
+      if (window.ZangyoNative && ZangyoNative.getNextAlarmNotice) {
+        noticeOn = String(ZangyoNative.getNextAlarmNotice()) === "true";
+      }
+    } catch (e) {}
+  }
+  function noticeHtml() {
+    readNotice();
+    var denied = noticeOn && perm && perm.notifications === false
+      ? '<p class="za-warn">通知が許可されていないので、次のアラームは表示できません。設定から通知をオンにしてください。</p>'
+      : "";
+    return '<label class="za-notice"><input type="checkbox" data-act="next-notice"' + (noticeOn ? " checked" : "") + ">次のアラームを通知に出す</label>" +
+      '<p class="za-muted">オンにすると、次に鳴る時刻を通知に出し続けます。最初はオンです。</p>' +
+      denied;
+  }
   function nextHtml() {
-    if (!schedule) return '<p class="za-muted">読み込み中です…</p>';
+    var head = noticeHtml();
+    if (!schedule) return head + '<p class="za-muted">読み込み中です…</p>';
     var items = schedule.items || [];
-    if (!items.length) return '<p class="za-muted">この先、鳴る予定はありません。休日と年休の日は鳴りません。</p>';
+    if (!items.length) return head + '<p class="za-muted">この先、鳴る予定はありません。休日と年休の日は鳴りません。</p>';
     var rows = items.map(function (item) {
       var skipped = !!item.skipped;
       var button = item.source === "snooze" ? "" : (
@@ -179,7 +199,7 @@
       return '<li class="' + (skipped ? "za-skipped" : "") + '"><b>' + esc(item.time) + "</b> " + esc(item.title) + "<span>" + esc(item.detail) + "</span>" + button + "</li>";
     }).join("");
     var days = schedule.horizonDays || 21;
-    return '<ul class="za-next">' + rows + "</ul>" +
+    return head + '<ul class="za-next">' + rows + "</ul>" +
       '<p class="za-muted">勤務のアラームは今から' + days + "日分です。オフの時刻は鳴りません。解除した予定は灰色のまま残ります。「戻す」で再び鳴ります。その日の勤務の種類を変えると、その日の解除は消えます。この日だけのアラームを入れた日は、その時刻が優先されます。</p>";
   }
 
@@ -302,6 +322,16 @@
 
   panel.addEventListener("change", function (event) {
     var target = event.target;
+    if (target.dataset && target.dataset.act === "next-notice") {
+      noticeOn = !!target.checked;
+      try {
+        if (window.ZangyoNative && ZangyoNative.setNextAlarmNotice) {
+          ZangyoNative.setNextAlarmNotice(noticeOn ? "true" : "false");
+        }
+      } catch (e) {}
+      refreshBits();
+      return;
+    }
     if (!target.dataset || !target.dataset.kind || target.dataset.field == null) return;
     var alarms = alarmDraft || blankAlarms();
     var row = alarms[target.dataset.kind] && alarms[target.dataset.kind][Number(target.dataset.i)];

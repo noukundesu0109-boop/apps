@@ -9,6 +9,7 @@ class ZangyoApp : Application() {
     override fun onCreate() {
         super.onCreate()
         ensureAlarmChannel(this)
+        NextAlarmNotice.ensureChannel(this)
     }
 }
 

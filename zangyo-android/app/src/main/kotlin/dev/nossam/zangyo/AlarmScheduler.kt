@@ -139,6 +139,7 @@ internal object AlarmScheduler {
             scheduleMaintenance(context, manager, codes.getValue("maintenance"), maintenanceAt(now), exact)
         }
         store.writeCodes(codes)
+        NextAlarmNotice.update(context, AlarmPlanner.nextUpcoming(planned, System.currentTimeMillis()))
         Log.i(TAG, "scheduled ${planned.size} alarms exact=$exact skipped=${skips.size}")
         val shown = (shiftPlan + planned.filter { it.source == "snooze" })
             .sortedWith(compareBy({ it.triggerAtMillis }, { it.id }))
@@ -201,12 +202,7 @@ internal object AlarmScheduler {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val show = PendingIntent.getActivity(
-            context,
-            0,
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
+        val show = NextAlarmNotice.showTab(context)
         try {
             if (exact) {
                 manager.setAlarmClock(AlarmManager.AlarmClockInfo(alarm.triggerAtMillis, show), operation)

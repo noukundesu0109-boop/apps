@@ -141,6 +141,27 @@ object AlarmPlanner {
     fun alarmsToSchedule(planned: List<PlannedAlarm>, skips: Set<String>): List<PlannedAlarm> =
         planned.filter { it.id !in skips }
 
+    /** The soonest alarm that has not rung yet. Skipped ones are already absent from [alarms]. */
+    fun nextUpcoming(alarms: List<PlannedAlarm>, nowMillis: Long): PlannedAlarm? {
+        return alarms
+            .filter { it.triggerAtMillis > nowMillis }
+            .minWithOrNull(compareBy({ it.triggerAtMillis }, { it.id }))
+    }
+
+    /** 「11/5(木) 5:30 起床」 */
+    fun nextAlarmText(alarm: PlannedAlarm): String {
+        val date = LocalDate.parse(alarm.date)
+        val dow = listOf("月", "火", "水", "木", "金", "土", "日")[date.dayOfWeek.value - 1]
+        return "${date.monthValue}/${date.dayOfMonth}($dow) ${displayTime(alarm.time)} ${alarm.title}"
+    }
+
+    fun nextAlarmNotice(alarm: PlannedAlarm): String = "次のアラーム ${nextAlarmText(alarm)}"
+
+    fun displayTime(hhmm: String): String {
+        val parsed = parseTime(hhmm) ?: return hhmm
+        return "${parsed.hour}:${parsed.minute.toString().padStart(2, '0')}"
+    }
+
     fun formatJapaneseDate(date: LocalDate): String {
         val dow = listOf("月", "火", "水", "木", "金", "土", "日")[date.dayOfWeek.value - 1]
         return "${date.monthValue}月${date.dayOfMonth}日（$dow）"

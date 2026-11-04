@@ -1,12 +1,15 @@
 package dev.nossam.zangyo
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.webkit.JsResult
 import android.webkit.ValueCallback
@@ -22,6 +25,7 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.webkit.WebViewAssetLoader
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
@@ -41,6 +45,9 @@ class MainActivity : AppCompatActivity(), ZangyoJsBridge.Ui {
     private lateinit var webView: WebView
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var guideShown = false
+    private var pageReady = false
+    private var pendingAlarmTab = false
+    private var askedNotifications = false
     private var driveName: String? = null
     private var driveContent: String? = null
     private val driveBusy = AtomicBoolean(false)
@@ -48,6 +55,11 @@ class MainActivity : AppCompatActivity(), ZangyoJsBridge.Ui {
 
     private val driveConsent = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         onDriveConsent(result.resultCode, result.data)
+    }
+
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        deliver("window.__zangyoPermStatus", PermissionGate.statusJson(this))
+        AlarmScheduler.enqueue { AlarmScheduler.reschedule(this) }
     }
 
     private val fileChooser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -78,8 +90,11 @@ class MainActivity : AppCompatActivity(), ZangyoJsBridge.Ui {
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
+                pageReady = true
                 deliver("window.__zangyoPermStatus", PermissionGate.statusJson(this@MainActivity))
                 UiBridge.lastSchedule?.let { deliver("window.__zangyoShowSchedule", it) }
+                openAlarmTab()
+                webView?.postDelayed({ openAlarmTab() }, 400)
             }
         }
         webView.webChromeClient = object : WebChromeClient() {
@@ -156,6 +171,34 @@ class MainActivity : AppCompatActivity(), ZangyoJsBridge.Ui {
             },
         )
         webView.loadUrl("https://appassets.androidplatform.net/assets/index.html")
+        noteAlarmTab(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        noteAlarmTab(intent)
+        openAlarmTab()
+    }
+
+    private fun noteAlarmTab(intent: Intent?) {
+        if (intent?.getStringExtra(AlarmIntents.EXTRA_OPEN_TAB) == "alarms") pendingAlarmTab = true
+    }
+
+    private fun openAlarmTab() {
+        if (!pageReady || !pendingAlarmTab || !::webView.isInitialized) return
+        webView.evaluateJavascript(
+            "(function(){try{if(window.__zangyoSetTab){window.__zangyoSetTab('alarms');return true}return false}catch(e){return false}})()",
+        ) { value ->
+            if (value == "true") pendingAlarmTab = false
+        }
+    }
+
+    override fun requestNotifications() {
+        if (Build.VERSION.SDK_INT < 33 || PermissionGate.notificationsOk(this)) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        askedNotifications = true
+        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     override fun onResume() {
@@ -164,7 +207,10 @@ class MainActivity : AppCompatActivity(), ZangyoJsBridge.Ui {
         if (!guideShown && PermissionGate.needsPrompt(this)) {
             guideShown = true
             startActivity(Intent(this, PermissionActivity::class.java))
+        } else if (!askedNotifications && NextAlarmPrefs.enabled(this) && !PermissionGate.notificationsOk(this)) {
+            requestNotifications()
         }
+        AlarmScheduler.enqueue { AlarmScheduler.reschedule(this) }
     }
 
     private val scheduleSink: (String) -> Unit = { json ->

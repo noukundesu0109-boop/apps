@@ -405,6 +405,73 @@ class AlarmPlannerTest {
         assertEquals(listOf("2026-11-03"), plan.map { it.date }.distinct())
     }
 
+    @Test
+    fun nextAlarmIsTheSoonestOneStillAhead() {
+        val data = work(shifts = mapOf("2026-11-05" to "day"))
+        val now = LocalDate.parse("2026-11-04").atTime(22, 0).atZone(zone)
+        val plan = AlarmPlanner.plan(data, now, horizonDays = 3)
+        val first = AlarmPlanner.nextUpcoming(plan, now.toInstant().toEpochMilli())
+        assertEquals("02:15", first!!.time)
+        assertEquals("目覚まし", first.title)
+        assertEquals("11/5(木) 2:15 目覚まし", AlarmPlanner.nextAlarmText(first))
+
+        val afterSkip = AlarmPlanner.alarmsToSchedule(plan, setOf(first.id))
+        val second = AlarmPlanner.nextUpcoming(afterSkip, now.toInstant().toEpochMilli())
+        assertEquals("04:35", second!!.time)
+        assertEquals("11/5(木) 4:35 出勤", AlarmPlanner.nextAlarmText(second))
+    }
+
+    @Test
+    fun nextAlarmNoticeMatchesTheClockWording() {
+        val alarm = PlannedAlarm(
+            id = "s|2026-11-05|day|0|05:30|起床",
+            triggerAtMillis = 0L,
+            date = "2026-11-05",
+            time = "05:30",
+            title = "起床",
+            detail = "",
+            source = "day",
+        )
+        assertEquals("11/5(木) 5:30 起床", AlarmPlanner.nextAlarmText(alarm))
+        assertEquals("次のアラーム 11/5(木) 5:30 起床", AlarmPlanner.nextAlarmNotice(alarm))
+        assertEquals("0:05", AlarmPlanner.displayTime("00:05"))
+    }
+
+    @Test
+    fun pastAlarmsAndAnEmptyListHaveNoNextAlarm() {
+        val data = work(shifts = mapOf("2026-11-05" to "day"))
+        val now = LocalDate.parse("2026-11-05").atTime(10, 0).atZone(zone)
+        val plan = AlarmPlanner.plan(data, now, horizonDays = 2)
+        val next = AlarmPlanner.nextUpcoming(plan, now.toInstant().toEpochMilli())
+        assertEquals("11:18", next!!.time)
+        assertNull(AlarmPlanner.nextUpcoming(emptyList(), now.toInstant().toEpochMilli()))
+    }
+
+    @Test
+    fun aSoonerSnoozeIsTheNextAlarm() {
+        val shift = PlannedAlarm(
+            id = "s|2026-11-05|day|2|06:07|移動",
+            triggerAtMillis = 2_000L,
+            date = "2026-11-05",
+            time = "06:07",
+            title = "移動",
+            detail = "",
+            source = "day",
+        )
+        val snooze = PlannedAlarm(
+            id = "z|snooze",
+            triggerAtMillis = 1_000L,
+            date = "2026-11-05",
+            time = "05:30",
+            title = "起床",
+            detail = "",
+            source = "snooze",
+        )
+        val next = AlarmPlanner.nextUpcoming(listOf(shift, snooze), 500L)
+        assertEquals("snooze", next!!.source)
+        assertEquals("起床", next.title)
+    }
+
     private fun noon(iso: String): ZonedDateTime {
         val date = LocalDate.parse(iso)
         return date.atTime(12, 0).atZone(zone)

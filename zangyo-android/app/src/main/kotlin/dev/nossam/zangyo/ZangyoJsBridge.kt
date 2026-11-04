@@ -13,6 +13,7 @@ class ZangyoJsBridge(
         fun shareBackup(name: String, content: String)
         fun saveToDrive(name: String, content: String)
         fun openPermissions()
+        fun requestNotifications()
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -43,5 +44,22 @@ class ZangyoJsBridge(
     @JavascriptInterface
     fun openPermissions() {
         main.post { ui.openPermissions() }
+    }
+
+    @JavascriptInterface
+    fun getNextAlarmNotice(): String = if (NextAlarmPrefs.enabled(appContext)) "true" else "false"
+
+    @JavascriptInterface
+    fun setNextAlarmNotice(value: String) {
+        if (value.length > 8) return
+        val on = value == "true"
+        NextAlarmPrefs.setEnabled(appContext, on)
+        if (on) main.post { ui.requestNotifications() }
+        AlarmScheduler.enqueue { AlarmScheduler.reschedule(appContext) }
+    }
+
+    @JavascriptInterface
+    fun requestNotifications() {
+        main.post { ui.requestNotifications() }
     }
 }
