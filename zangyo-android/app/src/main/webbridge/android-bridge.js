@@ -87,7 +87,8 @@
     ".za-chip{min-width:40px;min-height:36px;border-radius:999px;border:1px solid #e4ddd0;background:#fff;color:#1c1917;font-size:14px}",
     ".za-chip.on{background:#1f5c45;color:#fffdf8;border-color:#1f5c45;font-weight:700}",
     "#za-day-alarm{margin-top:14px}",
-    "#za-day-alarm h3{margin:0 0 8px;font-size:14px}"
+    "#za-day-alarm h3{margin:0 0 8px;font-size:14px}",
+    "#za-year-count .za-count{background:#fffdf8;border:1px solid #e4ddd0;border-radius:12px;padding:12px 14px;color:#1c1917;font-size:15px;line-height:1.5;font-weight:700}"
   ].join("");
   document.head.appendChild(style);
 
@@ -483,11 +484,61 @@
     markCalendar();
   });
 
+  function realDate(iso) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+    var parts = iso.split("-").map(Number);
+    var date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    return date.getUTCFullYear() === parts[0] && date.getUTCMonth() === parts[1] - 1 && date.getUTCDate() === parts[2];
+  }
+  function countYear(data, year) {
+    var counts = { day: 0, night: 0, off: 0, leave: 0 };
+    var prefix = String(year) + "-";
+    var shifts = data && data.shifts || {};
+    Object.keys(shifts).forEach(function (iso) {
+      if (iso.indexOf(prefix) !== 0 || !realDate(iso)) return;
+      if (shifts[iso] === "day") counts.day += 1;
+      else if (shifts[iso] === "night") counts.night += 1;
+      else if (shifts[iso] === "off") counts.off += 1;
+    });
+    var seen = {};
+    var leave = data && Array.isArray(data.leave) ? data.leave : [];
+    leave.forEach(function (iso) {
+      if (typeof iso !== "string" || seen[iso] || iso.indexOf(prefix) !== 0 || !realDate(iso)) return;
+      seen[iso] = true;
+      counts.leave += 1;
+    });
+    return counts;
+  }
+  function displayedYear(host) {
+    var select = host.parentElement && host.parentElement.querySelector("select");
+    if (select && /^\d{4}$/.test(String(select.value))) return Number(select.value);
+    return null;
+  }
+  function renderYearCount() {
+    var host = document.getElementById("za-year-count");
+    if (!host) return;
+    var year = displayedYear(host);
+    if (year == null) return;
+    var counts = countYear(stateNow(), year);
+    var text = "昼勤 " + counts.day + "日・夜勤 " + counts.night + "日・休日 " + counts.off + "日・年休 " + counts.leave + "日";
+    if (host.getAttribute("data-sig") === year + "|" + text) return;
+    host.setAttribute("data-sig", year + "|" + text);
+    host.innerHTML = '<div class="za-count" data-year-count="1">' + esc(text) + "</div>";
+  }
+  window.__zangyoOnData = function () { renderYearCount(); };
+
+  document.addEventListener("change", function (event) {
+    var target = event.target;
+    if (!target || target.tagName !== "SELECT" || !document.getElementById("za-year-count")) return;
+    renderYearCount();
+  }, true);
+
   var appRoot = document.getElementById("root");
   if (appRoot) {
     new MutationObserver(function () {
       markCalendar();
       renderDayAlarm();
+      renderYearCount();
     }).observe(appRoot, { childList: true, subtree: true });
   }
 

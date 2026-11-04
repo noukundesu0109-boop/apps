@@ -472,6 +472,42 @@ class AlarmPlannerTest {
         assertEquals("起床", next.title)
     }
 
+    @Test
+    fun yearCountIncludesEarlyDaysAsDayShiftsAndSkipsBlankDays() {
+        val data = work(
+            shifts = mapOf(
+                "2026-01-05" to "day",
+                "2026-01-06" to "day",
+                "2026-03-02" to "night",
+                "2026-05-03" to "off",
+                "2026-02-29" to "day",
+                "2026-13-01" to "night",
+                "2025-12-31" to "day",
+                "2027-01-01" to "night",
+            ),
+            early = setOf("2026-01-06"),
+            leave = setOf("2026-08-14", "2026-01-05", "2026-02-29", "2025-08-01"),
+        )
+        val counts = AlarmPlanner.countYear(data, 2026)
+        assertEquals(2, counts.day)
+        assertEquals(1, counts.night)
+        assertEquals(1, counts.off)
+        assertEquals(2, counts.leave)
+        assertEquals(YearShiftCounts(1, 0, 0, 1), AlarmPlanner.countYear(data, 2025))
+        assertEquals(YearShiftCounts(0, 1, 0, 0), AlarmPlanner.countYear(data, 2027))
+        assertEquals(YearShiftCounts(0, 0, 0, 0), AlarmPlanner.countYear(data, 2024))
+    }
+
+    @Test
+    fun leapDayCountsOnlyInALeapYear() {
+        val data = work(
+            shifts = mapOf("2024-02-29" to "day", "2026-02-29" to "night"),
+            leave = setOf("2024-02-29"),
+        )
+        assertEquals(YearShiftCounts(1, 0, 0, 1), AlarmPlanner.countYear(data, 2024))
+        assertEquals(YearShiftCounts(0, 0, 0, 0), AlarmPlanner.countYear(data, 2026))
+    }
+
     private fun noon(iso: String): ZonedDateTime {
         val date = LocalDate.parse(iso)
         return date.atTime(12, 0).atZone(zone)

@@ -141,6 +141,29 @@ object AlarmPlanner {
     fun alarmsToSchedule(planned: List<PlannedAlarm>, skips: Set<String>): List<PlannedAlarm> =
         planned.filter { it.id !in skips }
 
+    /**
+     * Days entered in one calendar year.
+     * 早出の昼勤 is still a day shift. A blank day is not counted.
+     * 年休 is its own list, so a day can be both a shift and 年休.
+     */
+    fun countYear(data: WorkData, year: Int): YearShiftCounts {
+        if (year !in 1..9999) return YearShiftCounts(0, 0, 0, 0)
+        val prefix = "%04d-".format(year)
+        var day = 0
+        var night = 0
+        var off = 0
+        for ((iso, shift) in data.shifts) {
+            if (!iso.startsWith(prefix) || !isIsoDate(iso)) continue
+            when (shift) {
+                "day" -> day += 1
+                "night" -> night += 1
+                "off" -> off += 1
+            }
+        }
+        val leave = data.leave.count { it.startsWith(prefix) && isIsoDate(it) }
+        return YearShiftCounts(day, night, off, leave)
+    }
+
     /** The soonest alarm that has not rung yet. Skipped ones are already absent from [alarms]. */
     fun nextUpcoming(alarms: List<PlannedAlarm>, nowMillis: Long): PlannedAlarm? {
         return alarms
@@ -175,6 +198,8 @@ object AlarmPlanner {
         return LocalTime.of(hour, minute)
     }
 }
+
+data class YearShiftCounts(val day: Int, val night: Int, val off: Int, val leave: Int)
 
 data class AlarmRow(val label: String, val time: String, val enabled: Boolean = true)
 

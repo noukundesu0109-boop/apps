@@ -13,8 +13,8 @@ android {
         applicationId = "dev.nossam.zangyo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.0.8"
+        versionCode = 10
+        versionName = "1.0.9"
     }
 
     buildTypes {
@@ -74,6 +74,7 @@ val prepareWeb = tasks.register("prepareZangyoWeb") {
         check(index.contains("earlyWeekdays:ew")) { "early weekday setting was not kept" }
         check(index.contains("enabled:e.enabled===!1")) { "alarm on/off was not kept" }
         check(index.contains("__zangyoDriveDone")) { "drive save was not switched to Android sign-in" }
+        check(index.contains("za-year-count")) { "year day count was not injected" }
         check(index.contains("新しい1件だけを残し")) { "drive keep-one text was not updated" }
         check(!index.contains("serviceWorker.register")) { "service worker registration still present" }
     }
@@ -146,6 +147,11 @@ fun patchIndex(html: String): String {
         text,
         """v=(0,l.useMemo)(()=>new Set(n.early),[n.early]),y=e=>r(t=>({...t,early:t.early.includes(e)?t.early.filter(t=>t!==e):[...t.early,e].sort()}))""",
         """v=(0,l.useMemo)(()=>{let s=new Set(n.early||[]),k=new Set(n.earlySkip||[]),w=new Set(n.earlyWeekdays||[]);return{has(e){if(k.has(e))return!1;if(s.has(e))return!0;if(!w.size||(n.shifts||{})[e]!==`day`)return!1;let[t,r,i]=e.split(`-`).map(Number),a=new Date(Date.UTC(t,r-1,i)).getUTCDay();return w.has(a===0?7:a)}}},[n.early,n.earlySkip,n.earlyWeekdays,n.shifts]),y=e=>r(t=>{let w=new Set(t.earlyWeekdays||[]),[yy,mm,dd]=e.split(`-`).map(Number),a=new Date(Date.UTC(yy,mm-1,dd)).getUTCDay(),wd=a===0?7:a,auto=t.shifts[e]===`day`&&w.has(wd),on=!(t.earlySkip||[]).includes(e)&&((t.early||[]).includes(e)||auto);return on?{...t,early:(t.early||[]).filter(n=>n!==e),earlySkip:auto?[...new Set([...(t.earlySkip||[]),e])].sort():(t.earlySkip||[]).filter(n=>n!==e)}:{...t,early:[...new Set([...(t.early||[]),e])].sort(),earlySkip:(t.earlySkip||[]).filter(n=>n!==e)}})""",
+    )
+    text = replaceOne(
+        text,
+        """i===`year`&&(0,A.jsxs)(A.Fragment,{children:[(0,A.jsxs)(`div`,{className:`flex items-center justify-between`,children:""",
+        """i===`year`&&(0,A.jsxs)(A.Fragment,{children:[(0,A.jsx)(`div`,{id:`za-year-count`,className:`mb-3`}),(0,A.jsxs)(`div`,{className:`flex items-center justify-between`,children:""",
     )
     text = moveLeaveSettings(text)
     return text
