@@ -8,6 +8,7 @@
     <string name="voice_label">声でメモ</string>
     <string name="voice_widget_desc">話して予定を入れます</string>
     <string name="voice_prompt">予定を話してください</string>
+    <string name="voice_command_prompt">保存、やり直し、やめる、と話せます</string>
     <string name="voice_denied">マイクが許可されていないので、声では入れられません。設定からマイクをオンにしてください</string>
     <string name="voice_unavailable">このスマホでは声の入力が使えません</string>
     <string name="voice_nomatch">聞き取れませんでした。もう一度話してください</string>

@@ -14,6 +14,8 @@ class TaskJsBridge(
         fun saveToDrive(name: String, content: String)
         fun openPermissions()
         fun startVoice()
+        fun listenForCommand()
+        fun stopVoice()
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -43,6 +45,16 @@ class TaskJsBridge(
     @JavascriptInterface
     fun startVoice() {
         main.post { ui.startVoice() }
+    }
+
+    @JavascriptInterface
+    fun listenForCommand() {
+        main.post { ui.listenForCommand() }
+    }
+
+    @JavascriptInterface
+    fun stopVoice() {
+        main.post { ui.stopVoice() }
     }
 
     @JavascriptInterface

@@ -10,7 +10,11 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.webkit.JsResult
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -34,6 +38,8 @@ import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import dev.nossam.task.drive.DriveMessages
 import dev.nossam.task.drive.DriveNotice
+import dev.nossam.task.voice.VoiceCommand
+import dev.nossam.task.voice.VoiceCommandParser
 import dev.nossam.task.voice.VoiceMemoParser
 import org.json.JSONObject
 import java.io.File
@@ -48,6 +54,14 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
     private lateinit var webView: WebView
     private var pageReady = false
     private var pendingVoice = false
+    private var micForCommand = false
+    private var afterMic: (() -> Unit)? = null
+    private val voiceHandler = Handler(Looper.getMainLooper())
+    private var commandToken = 0
+    private var activeCommandToken = 0
+    private var commandRetries = 0
+    private var commandWatch: Runnable? = null
+    private var speech: SpeechRecognizer? = null
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var guideShown = false
     private var driveName: String? = null
@@ -64,7 +78,15 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
     }
 
     private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) launchRecognizer() else deliverVoiceError(getString(R.string.voice_denied))
+        val next = afterMic
+        afterMic = null
+        if (granted) {
+            next?.invoke()
+        } else if (micForCommand) {
+            deliverCommandMessage(getString(R.string.voice_denied))
+        } else {
+            deliverVoiceError(getString(R.string.voice_denied))
+        }
     }
 
     private val fileChooser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -207,11 +229,172 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
     }
 
     override fun startVoice() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            micPermission.launch(Manifest.permission.RECORD_AUDIO)
+        stopVoice()
+        ensureMic(forCommand = false) { launchRecognizer() }
+    }
+
+    override fun listenForCommand() {
+        ensureMic(forCommand = true) {
+            commandToken += 1
+            commandRetries = 1
+            beginCommandListen(commandToken)
+        }
+    }
+
+    override fun stopVoice() {
+        commandToken += 1
+        commandRetries = 0
+        voiceHandler.removeCallbacksAndMessages(null)
+        cancelRecognizer()
+        deliverListen(false)
+    }
+
+    private fun ensureMic(forCommand: Boolean, next: () -> Unit) {
+        micForCommand = forCommand
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            next()
             return
         }
-        launchRecognizer()
+        afterMic = next
+        micPermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    private fun beginCommandListen(token: Int) {
+        if (token != commandToken) return
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            deliverCommandMessage(getString(R.string.voice_unavailable))
+            return
+        }
+        val recognizer = speechRecognizer()
+        if (recognizer == null) {
+            deliverCommandMessage(getString(R.string.voice_unavailable))
+            return
+        }
+        activeCommandToken = token
+        try {
+            recognizer.cancel()
+        } catch (_: Throwable) {
+        }
+        deliverListen(true)
+        watchCommand(token)
+        try {
+            recognizer.startListening(commandIntent())
+        } catch (_: Throwable) {
+            onCommandMiss(token)
+        }
+    }
+
+    private fun watchCommand(token: Int) {
+        clearCommandWatch()
+        val watch = Runnable { if (token == commandToken) onCommandMiss(token) }
+        commandWatch = watch
+        voiceHandler.postDelayed(watch, 12_000)
+    }
+
+    private fun clearCommandWatch() {
+        commandWatch?.let { voiceHandler.removeCallbacks(it) }
+        commandWatch = null
+    }
+
+    private fun commandIntent(): Intent {
+        return Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ja-JP")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ja-JP")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, getString(R.string.voice_command_prompt))
+        }
+    }
+
+    private fun speechRecognizer(): SpeechRecognizer? {
+        speech?.let { return it }
+        return try {
+            SpeechRecognizer.createSpeechRecognizer(this).also {
+                it.setRecognitionListener(commandListener)
+                speech = it
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun cancelRecognizer() {
+        try {
+            speech?.cancel()
+        } catch (_: Throwable) {
+        }
+    }
+
+    private val commandListener = object : RecognitionListener {
+        override fun onReadyForSpeech(params: Bundle?) = Unit
+        override fun onBeginningOfSpeech() = Unit
+        override fun onRmsChanged(rmsdB: Float) = Unit
+        override fun onBufferReceived(buffer: ByteArray?) = Unit
+        override fun onEndOfSpeech() = Unit
+        override fun onPartialResults(partialResults: Bundle?) = Unit
+        override fun onEvent(eventType: Int, params: Bundle?) = Unit
+
+        override fun onResults(results: Bundle?) {
+            val token = activeCommandToken
+            if (token != commandToken) return
+            clearCommandWatch()
+            val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
+            val command = VoiceCommandParser.parseFirst(heard, ZonedDateTime.now(VoiceMemoParser.ZONE))
+            if (command is VoiceCommand.Unrecognized) {
+                onCommandMiss(token)
+                return
+            }
+            commandRetries = 0
+            deliverListen(false)
+            deliver("window.__taskVoiceCommand", commandJson(command).toString())
+        }
+
+        override fun onError(error: Int) {
+            val token = activeCommandToken
+            if (token != commandToken) return
+            if (error == SpeechRecognizer.ERROR_CLIENT) return
+            clearCommandWatch()
+            if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                deliverCommandMessage(getString(R.string.voice_denied))
+                return
+            }
+            onCommandMiss(token)
+        }
+    }
+
+    private fun onCommandMiss(token: Int) {
+        if (token != commandToken) return
+        clearCommandWatch()
+        if (commandRetries > 0) {
+            commandRetries -= 1
+            voiceHandler.postDelayed({ beginCommandListen(token) }, 350)
+        } else {
+            deliverListen(false)
+        }
+    }
+
+    private fun commandJson(command: VoiceCommand): JSONObject {
+        val json = JSONObject().put("ok", true)
+        return when (command) {
+            VoiceCommand.Save -> json.put("command", "save")
+            VoiceCommand.Retry -> json.put("command", "retry")
+            VoiceCommand.Cancel -> json.put("command", "cancel")
+            is VoiceCommand.SetTime -> json.put("command", "time").put("time", command.time?.let { "%02d:%02d".format(it.hour, it.minute) } ?: JSONObject.NULL)
+            is VoiceCommand.SetDate -> json.put("command", "date").put("date", command.date?.toString() ?: JSONObject.NULL)
+            is VoiceCommand.SetContent -> json.put("command", "content").put("text", command.text)
+            VoiceCommand.Unrecognized -> JSONObject().put("ok", false)
+        }
+    }
+
+    private fun deliverListen(on: Boolean) {
+        deliver("window.__taskVoiceCommand", JSONObject().put("listening", on).toString())
+    }
+
+    private fun deliverCommandMessage(message: String) {
+        deliverListen(false)
+        val json = JSONObject().put("ok", false).put("message", message).toString()
+        deliver("window.__taskVoiceCommand", json)
     }
 
     private fun launchRecognizer() {
@@ -274,6 +457,13 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
     }
 
     override fun onDestroy() {
+        commandToken += 1
+        voiceHandler.removeCallbacksAndMessages(null)
+        try {
+            speech?.destroy()
+        } catch (_: Throwable) {
+        }
+        speech = null
         if (UiBridge.scheduleSink === scheduleSink) UiBridge.scheduleSink = null
         if (UiBridge.permissionSink === permissionSink) UiBridge.permissionSink = null
         webView.destroy()

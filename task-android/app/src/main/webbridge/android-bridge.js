@@ -60,9 +60,15 @@
     "#task-voice-sheet label{display:block;margin:10px 0 4px;color:#6f675c;font-size:13px}",
     "#task-voice-sheet input{width:100%;box-sizing:border-box;font-size:16px;padding:8px 10px;border:1px solid #e4ddd0;border-radius:8px;background:#fff;color:#1c1917}",
     "#task-voice-sheet .warn{min-height:1.2em;margin:8px 0 0;color:#b42318;font-size:13px}",
+    "#task-voice-sheet .hint{margin:8px 0 0;color:#6f675c;font-size:13px;line-height:1.4}",
+    "#task-voice-sheet .listen{display:none;align-items:center;gap:8px;margin-top:6px;color:#1f5c45;font-size:14px}",
+    "#task-voice-sheet .listen.on{display:flex}",
+    "#task-voice-sheet .listen i{width:8px;height:8px;border-radius:50%;background:#1f5c45;display:block}",
     "#task-voice-sheet .row{display:flex;gap:8px;margin-top:12px}",
-    "#task-voice-sheet button{flex:1;min-height:44px;border-radius:10px;border:1px solid #e4ddd0;background:#fff;color:#1c1917;font-size:15px}",
-    "#task-voice-sheet button.save{background:#1f5c45;color:#fff;border-color:#1f5c45}"
+    "#task-voice-sheet .row button{flex:1;min-height:44px;border-radius:10px;border:1px solid #e4ddd0;background:#fff;color:#1c1917;font-size:15px}",
+    "#task-voice-sheet .row button.save{background:#1f5c45;color:#fff;border-color:#1f5c45}",
+    "#task-voice-sheet button.mic{display:inline-flex;width:auto;min-height:36px;margin-top:8px;padding:0 12px;border-radius:10px;border:1px solid #e4ddd0;background:#fff;color:#1f5c45;font-size:14px}",
+    "#task-voice-sheet.listening button.mic{display:none}"
   ].join("");
   document.head.appendChild(style);
 
@@ -375,9 +381,29 @@
     }
   }
 
+  function stopCommandListen() {
+    try { if (window.TaskNative && TaskNative.stopVoice) TaskNative.stopVoice(); } catch (e) {}
+  }
+  function listenForCommand() {
+    try { if (window.TaskNative && TaskNative.listenForCommand) TaskNative.listenForCommand(); } catch (e) {}
+  }
   function removeVoiceSheet() {
+    stopCommandListen();
     var old = document.getElementById("task-voice-sheet");
     if (old) old.remove();
+  }
+  function setVoiceListening(on) {
+    var sheet = document.getElementById("task-voice-sheet");
+    if (!sheet) return;
+    sheet.classList.toggle("listening", !!on);
+    var row = sheet.querySelector(".listen");
+    if (row) row.classList.toggle("on", !!on);
+  }
+  function refreshVoiceWhen(sheet) {
+    var date = sheet.querySelector("#task-voice-date").value;
+    var time = sheet.querySelector("#task-voice-time").value;
+    var when = sheet.querySelector(".when");
+    if (when) when.textContent = describeWhen(date, time);
   }
   function voiceBox(html) {
     removeVoiceSheet();
@@ -417,16 +443,31 @@
       "<label for='task-voice-time'>時刻（なくても可）</label>" +
       "<input id='task-voice-time' type='time' value='" + esc(data.time || "") + "'>" +
       "<p class='warn' id='task-voice-warn'></p>" +
+      '<p class="hint">『保存』『やり直し』『やめる』と話せます</p>' +
+      '<div class="listen" id="task-voice-listen"><i></i><span>聞いています</span></div>' +
+      '<button type="button" class="mic" data-voice-mic aria-label="もう一度聞く">もう一度聞く</button>' +
       '<div class="row"><button type="button" class="save" data-voice-save>保存</button>' +
       '<button type="button" data-voice-retry>やり直す</button>' +
       '<button type="button" data-voice-close>やめる</button></div>'
     );
-    sheet.querySelector("[data-voice-close]").addEventListener("click", removeVoiceSheet);
+    sheet.querySelector("#task-voice-date").addEventListener("input", function () { refreshVoiceWhen(sheet); });
+    sheet.querySelector("#task-voice-time").addEventListener("input", function () { refreshVoiceWhen(sheet); });
+    sheet.querySelector("[data-voice-mic]").addEventListener("click", function () {
+      var warn = sheet.querySelector("#task-voice-warn");
+      if (warn) warn.textContent = "";
+      listenForCommand();
+    });
+    sheet.querySelector("[data-voice-close]").addEventListener("click", function () {
+      stopCommandListen();
+      removeVoiceSheet();
+    });
     sheet.querySelector("[data-voice-retry]").addEventListener("click", function () {
+      stopCommandListen();
       removeVoiceSheet();
       try { if (window.TaskNative && TaskNative.startVoice) TaskNative.startVoice(); } catch (e) {}
     });
     sheet.querySelector("[data-voice-save]").addEventListener("click", function () {
+      stopCommandListen();
       var text = sheet.querySelector("#task-voice-text").value.trim();
       var warn = sheet.querySelector("#task-voice-warn");
       if (!text) {
@@ -440,7 +481,57 @@
       window.__taskAddMemo(text, sheet.querySelector("#task-voice-date").value, sheet.querySelector("#task-voice-time").value);
       removeVoiceSheet();
     });
+    listenForCommand();
   }
+  window.__taskVoiceCommand = function (raw) {
+    var sheet = document.getElementById("task-voice-sheet");
+    if (!sheet) return;
+    var data = null;
+    try { data = typeof raw === "string" ? JSON.parse(raw) : raw; } catch (e) { data = null; }
+    if (!data) return;
+    if (!data.command && typeof data.listening === "boolean") {
+      setVoiceListening(data.listening);
+      return;
+    }
+    if (data.message) {
+      var warn = sheet.querySelector("#task-voice-warn");
+      if (warn) warn.textContent = data.message;
+      setVoiceListening(false);
+      return;
+    }
+    if (!data.ok) {
+      setVoiceListening(false);
+      return;
+    }
+    if (data.command === "save") {
+      sheet.querySelector("[data-voice-save]").click();
+      return;
+    }
+    if (data.command === "retry") {
+      sheet.querySelector("[data-voice-retry]").click();
+      return;
+    }
+    if (data.command === "cancel") {
+      sheet.querySelector("[data-voice-close]").click();
+      return;
+    }
+    if (data.command === "time") {
+      sheet.querySelector("#task-voice-time").value = data.time || "";
+      refreshVoiceWhen(sheet);
+      listenForCommand();
+      return;
+    }
+    if (data.command === "date") {
+      sheet.querySelector("#task-voice-date").value = data.date || "";
+      refreshVoiceWhen(sheet);
+      listenForCommand();
+      return;
+    }
+    if (data.command === "content") {
+      sheet.querySelector("#task-voice-text").value = data.text || "";
+      listenForCommand();
+    }
+  };
   window.__taskVoiceHeard = function (raw) {
     var data = null;
     try { data = typeof raw === "string" ? JSON.parse(raw) : raw; } catch (e) { data = null; }
