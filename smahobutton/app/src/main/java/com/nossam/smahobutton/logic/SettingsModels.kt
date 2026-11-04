@@ -47,9 +47,19 @@ data class AppVolumeSpec(
 )
 
 @Serializable
+data class ShutterSpot(
+    val packageName: String,
+    val orientation: String = "portrait",
+    val x: Float = 0.5f,
+    val y: Float = 0.88f,
+)
+
+@Serializable
 data class SettingsSpec(
     val enabled: Boolean = false,
     val restoreVolumeOnLeave: Boolean = true,
+    val shutterOnOpen: Boolean = false,
+    val shutterSpots: List<ShutterSpot> = emptyList(),
     val buttons: List<ButtonSpec> = listOf(ButtonSpec()),
     val appVolumes: List<AppVolumeSpec> = emptyList(),
 )
@@ -109,6 +119,7 @@ const val TYPE_RECENTS = "recents"
 const val TYPE_NOTIFICATIONS = "notifications"
 const val TYPE_LOCK = "lock"
 const val TYPE_REMEMBER_VOLUME = "remember_volume"
+const val TYPE_SHUTTER = "shutter"
 
 val ACTION_CHOICES = listOf(
     ActionChoice(TYPE_NONE, "なし"),
@@ -125,6 +136,7 @@ val ACTION_CHOICES = listOf(
     ActionChoice(TYPE_NOTIFICATIONS, "通知を出す"),
     ActionChoice(TYPE_LOCK, "画面ロック"),
     ActionChoice(TYPE_REMEMBER_VOLUME, "この画面の音量を覚える"),
+    ActionChoice(TYPE_SHUTTER, "カメラのシャッター"),
 )
 
 const val GESTURE_TAP = "tap"
@@ -191,6 +203,7 @@ fun actionShort(action: ActionSpec): String = when (action.type) {
     TYPE_NOTIFICATIONS -> "通知"
     TYPE_LOCK -> "ロック"
     TYPE_REMEMBER_VOLUME -> "覚える"
+    TYPE_SHUTTER -> "カメラ"
     else -> "なし"
 }
 
@@ -241,7 +254,11 @@ fun normalize(spec: SettingsSpec): SettingsSpec {
             menu = raw.menu.map(::normalizeAction).filter { it.type != TYPE_NONE }.take(6),
         )
     }
-    return spec.copy(buttons = buttons, appVolumes = normalizeVolumes(spec.appVolumes))
+    return spec.copy(
+        buttons = buttons,
+        appVolumes = normalizeVolumes(spec.appVolumes),
+        shutterSpots = normalizeShutterSpots(spec.shutterSpots),
+    )
 }
 
 fun normalizeVolumes(list: List<AppVolumeSpec>): List<AppVolumeSpec> {

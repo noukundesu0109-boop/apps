@@ -22,6 +22,7 @@ import com.nossam.smahobutton.logic.TYPE_RECENTS
 import com.nossam.smahobutton.logic.TYPE_REMEMBER_VOLUME
 import com.nossam.smahobutton.logic.TYPE_RINGER
 import com.nossam.smahobutton.logic.TYPE_SCREENSHOT
+import com.nossam.smahobutton.logic.TYPE_SHUTTER
 import com.nossam.smahobutton.logic.TYPE_TORCH
 import com.nossam.smahobutton.logic.TYPE_VOLUME_DOWN
 import com.nossam.smahobutton.logic.TYPE_VOLUME_PANEL
@@ -55,6 +56,7 @@ class ActionExecutor(private val app: SmahoApp) {
             TYPE_NOTIFICATIONS -> global(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS, "通知を出せませんでした")
             TYPE_LOCK -> global(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN, "画面をロックできませんでした")
             TYPE_REMEMBER_VOLUME -> remember()
+            TYPE_SHUTTER -> SmahoRuntime.cameraShutter()
         }
     }
 

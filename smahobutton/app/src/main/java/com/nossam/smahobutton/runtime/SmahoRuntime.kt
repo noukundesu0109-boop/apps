@@ -26,7 +26,12 @@ import com.nossam.smahobutton.logic.ForegroundVolumeCoordinator
 import com.nossam.smahobutton.logic.GESTURE_DOUBLE
 import com.nossam.smahobutton.logic.GESTURE_LONG
 import com.nossam.smahobutton.logic.GESTURE_TAP
+import android.provider.MediaStore
+import com.nossam.smahobutton.logic.ShutterSpot
+import com.nossam.smahobutton.logic.isCameraPackage
+import com.nossam.smahobutton.logic.orientationKey
 import com.nossam.smahobutton.logic.SettingsSpec
+import com.nossam.smahobutton.overlay.ShutterAim
 import com.nossam.smahobutton.overlay.BubbleToast
 import com.nossam.smahobutton.overlay.FloatingOverlay
 import com.nossam.smahobutton.service.OverlayService
@@ -163,6 +168,109 @@ object SmahoRuntime {
         )
         applyVolume(outcome.setVolume)
         schedulePoll()
+        if (pendingShutter && isCameraPackage(packageName)) {
+            pendingShutter = false
+            scope.launch {
+                delay(500)
+                shoot(fromButton = false)
+            }
+        }
+    }
+
+    private var pendingShutter = false
+    private var aim: ShutterAim? = null
+
+    fun cameraShutter() {
+        val foreground = confirmedPackage
+        if (isCameraPackage(foreground)) {
+            scope.launch {
+                delay(150)
+                shoot(fromButton = true)
+            }
+            return
+        }
+        if (!openStillCamera()) {
+            toast("カメラを開けませんでした")
+            return
+        }
+        if (repo.state.value?.shutterOnOpen == true) pendingShutter = true
+    }
+
+    fun beginShutterAim() {
+        openStillCamera()
+        toast("シャッターの位置をタップしてください")
+        scope.launch {
+            delay(700)
+            val service = accessibility
+            val type = if (service != null) {
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+            } else if (Settings.canDrawOverlays(app)) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                toast("上に表示の許可が必要です")
+                return@launch
+            }
+            aim?.dismiss()
+            val host = service ?: app
+            aim = ShutterAim(host, type) { x, y -> saveShutterSpot(x, y) }.also { it.show() }
+        }
+    }
+
+    private fun shoot(fromButton: Boolean) {
+        val service = accessibility
+        if (service == null) {
+            toast("ユーザー補助をオンにしてください")
+            return
+        }
+        holdHidden = true
+        refreshButtons()
+        scope.launch {
+            delay(80)
+            var finished = false
+            try {
+                service.pressShutter { ok ->
+                    if (finished) return@pressShutter
+                    finished = true
+                    scope.launch {
+                        holdHidden = false
+                        refreshButtons()
+                        if (!ok) toast("シャッターが見つかりませんでした。場所を覚えさせてください")
+                    }
+                }
+            } catch (_: Exception) {
+                holdHidden = false
+                refreshButtons()
+                if (fromButton) toast("シャッターが見つかりませんでした。場所を覚えさせてください")
+            }
+        }
+    }
+
+    private fun saveShutterSpot(x: Float, y: Float) {
+        val portrait = app.resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val pkg = confirmedPackage?.takeIf { isCameraPackage(it) } ?: "com.google.android.GoogleCamera"
+        val orient = orientationKey(portrait)
+        scope.launch {
+            repo.update { settings ->
+                val kept = settings.shutterSpots.filter { it.packageName != pkg || it.orientation != orient }
+                settings.copy(shutterSpots = kept + ShutterSpot(pkg, orient, x, y))
+            }
+            toast("ここをシャッターにしました")
+        }
+    }
+
+    private fun openStillCamera(): Boolean = try {
+        val intent = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        app.startActivity(intent)
+        true
+    } catch (_: Exception) {
+        val fallback = app.packageManager.getLaunchIntentForPackage("com.google.android.GoogleCamera")
+        if (fallback == null) {
+            false
+        } else {
+            fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            runCatching { app.startActivity(fallback) }.isSuccess
+        }
     }
 
     fun currentFilter(): FilterConfig {

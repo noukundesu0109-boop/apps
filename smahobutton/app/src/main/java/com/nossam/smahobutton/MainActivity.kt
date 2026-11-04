@@ -232,6 +232,8 @@ private fun AppNav(settings: SettingsSpec, viewModel: SettingsViewModel, start: 
                 onButtons = { nav.navigate(ROUTE_BUTTONS) },
                 onVolumes = { nav.navigate(ROUTE_VOLUMES) },
                 onRestore = viewModel::replaceAll,
+                onShutterOnOpen = viewModel::setShutterOnOpen,
+                onCalibrateShutter = { com.nossam.smahobutton.runtime.SmahoRuntime.beginShutterAim() },
             )
         }
         composable(ROUTE_BUTTONS) {

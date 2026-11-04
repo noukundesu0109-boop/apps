@@ -73,6 +73,8 @@ fun HomeScreen(
     onButtons: () -> Unit,
     onVolumes: () -> Unit,
     onRestore: (SettingsSpec) -> Unit,
+    onShutterOnOpen: (Boolean) -> Unit,
+    onCalibrateShutter: () -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -223,6 +225,29 @@ fun HomeScreen(
         NavCard("ボタンの設定", onButtons)
         NavCard("アプリごとの音量", onVolumes)
         NavCard("控え（バックアップ）") { showBackup = true }
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("開いたらすぐ撮る", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "カメラを開いた直後に、シャッターを押します。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = settings.shutterOnOpen,
+                        onCheckedChange = onShutterOnOpen,
+                        colors = SwitchDefaults.colors(
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedThumbColor = Color.White,
+                        ),
+                    )
+                }
+                TextButton(onClick = onCalibrateShutter) { Text("シャッターの場所を覚える") }
+            }
+        }
         Text(
             "オンのまま再起動すると、ボタンは戻ります。",
             style = MaterialTheme.typography.bodySmall,

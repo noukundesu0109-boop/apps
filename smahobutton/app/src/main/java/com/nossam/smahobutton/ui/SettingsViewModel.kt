@@ -22,6 +22,8 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setEnabled(on: Boolean) = edit { it.copy(enabled = on) }
 
+    fun setShutterOnOpen(on: Boolean) = edit { it.copy(shutterOnOpen = on) }
+
     fun replaceAll(spec: com.nossam.smahobutton.logic.SettingsSpec) {
         viewModelScope.launch {
             repo.replace(spec)
