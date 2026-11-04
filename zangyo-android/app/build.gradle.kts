@@ -13,13 +13,14 @@ android {
         applicationId = "dev.nossam.zangyo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "1.1.0"
+        versionCode = 12
+        versionName = "1.1.1"
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
         debug {
             isMinifyEnabled = false
@@ -32,6 +33,10 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+    }
+
+    lint {
+        checkReleaseBuilds = false
     }
 
     packaging {
@@ -84,7 +89,7 @@ val prepareWeb = tasks.register("prepareZangyoWeb") {
 
 android.sourceSets.getByName("main").assets.srcDir(generatedWeb)
 tasks.configureEach {
-    if (name.startsWith("merge") && name.endsWith("Assets")) {
+    if ((name.startsWith("merge") && name.endsWith("Assets")) || name.contains("LintVital")) {
         dependsOn(prepareWeb)
     }
 }

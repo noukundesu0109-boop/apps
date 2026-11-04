@@ -144,8 +144,9 @@ object AlarmPlanner {
         planned.filter { it.id !in skips }
 
     /**
-     * Days entered in one calendar year.
-     * 早出の昼勤 is still a day shift. A blank day is not counted.
+     * Days entered in one calendar year, January through December.
+     * 早出の昼勤 is still a day shift. 出勤 is day plus night.
+     * A blank day is not counted.
      * 年休 is its own list, so a day can be both a shift and 年休.
      */
     fun countYear(data: WorkData, year: Int): YearShiftCounts {
@@ -232,7 +233,10 @@ data class YearShiftCounts(
     val leave: Int,
     val earlyDays: Int = 0,
     val earlyHours: Double = 0.0,
-)
+) {
+    /** 出勤: day shifts plus night shifts. Early days are already inside [day]. */
+    val attended: Int get() = day + night
+}
 
 data class AlarmRow(val label: String, val time: String, val enabled: Boolean = true)
 

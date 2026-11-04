@@ -491,11 +491,15 @@ class AlarmPlannerTest {
         val counts = AlarmPlanner.countYear(data, 2026)
         assertEquals(2, counts.day)
         assertEquals(1, counts.night)
+        assertEquals(3, counts.attended)
         assertEquals(1, counts.off)
         assertEquals(2, counts.leave)
         assertEquals(YearShiftCounts(1, 0, 0, 1), AlarmPlanner.countYear(data, 2025))
+        assertEquals(1, AlarmPlanner.countYear(data, 2025).attended)
         assertEquals(YearShiftCounts(0, 1, 0, 0), AlarmPlanner.countYear(data, 2027))
+        assertEquals(1, AlarmPlanner.countYear(data, 2027).attended)
         assertEquals(YearShiftCounts(0, 0, 0, 0), AlarmPlanner.countYear(data, 2024))
+        assertEquals(0, AlarmPlanner.countYear(data, 2024).attended)
     }
 
     @Test
@@ -524,9 +528,13 @@ class AlarmPlannerTest {
         assertEquals(0.0, AlarmPlanner.earlyHours(data, "2026-11-16"), 0.0)
         assertEquals(0.0, AlarmPlanner.earlyHours(data, "2026-11-05"), 0.0)
         val year = AlarmPlanner.countYear(data, 2026)
+        assertEquals(5, year.day)
+        assertEquals(1, year.night)
+        assertEquals(6, year.attended)
         assertEquals(3, year.earlyDays)
         assertEquals(1.5, year.earlyHours, 0.0)
         assertEquals(0, AlarmPlanner.countYear(data, 2025).earlyDays)
+        assertEquals(1, AlarmPlanner.countYear(data, 2025).attended)
     }
 
     @Test

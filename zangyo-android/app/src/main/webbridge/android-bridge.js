@@ -88,8 +88,18 @@
     ".za-chip.on{background:#1f5c45;color:#fffdf8;border-color:#1f5c45;font-weight:700}",
     "#za-day-alarm{margin-top:14px}",
     "#za-day-alarm h3{margin:0 0 8px;font-size:14px}",
-    "#za-year-count .za-count{background:#fffdf8;border:1px solid #e4ddd0;border-radius:12px;padding:12px 14px;color:#1c1917;font-size:15px;line-height:1.5;font-weight:700}",
-    "#za-year-count .za-count div+div{margin-top:4px}",
+    "#za-year-count .za-counts{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}",
+    "#za-year-count .za-ycard{box-sizing:border-box;width:calc((100% - 16px) / 3);aspect-ratio:1;border-radius:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:8px 4px;text-align:center}",
+    "#za-year-count .za-ico{width:22px;height:22px;display:block}",
+    "#za-year-count .za-ico svg{width:22px;height:22px;display:block}",
+    "#za-year-count .za-label{font-size:12px;font-weight:700;line-height:1.2}",
+    "#za-year-count .za-num{font-size:28px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}",
+    "#za-year-count .za-num span{font-size:12px;font-weight:700;margin-left:1px}",
+    "#za-year-count .za-day{background:#fbe7b0;color:#1c1917}",
+    "#za-year-count .za-night{background:#b8bcc4;color:#1c1917}",
+    "#za-year-count .za-work{background:#1f5c45;color:#fffdf8}",
+    "#za-year-count .za-off{background:#fff;color:#b42318;border:1px solid #e4ddd0}",
+    "#za-year-count .za-leave{background:#c5e88a;color:#4d7c0f}",
     ".za-ehours{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:6px 0}",
     ".za-eh{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;color:#6f675c}",
     ".za-eh input{width:100%;box-sizing:border-box;font-size:14px;padding:6px 2px;text-align:center;border:1px solid #e4ddd0;border-radius:8px;background:#fff;color:#1c1917}",
@@ -118,6 +128,17 @@
       bell: '<path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 19a2 2 0 0 0 4 0"/>'
     };
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (paths[name] || "") + "</svg>";
+  }
+
+  function yearIcon(name) {
+    var paths = {
+      sun: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3.4v2.2M12 18.4v2.2M3.4 12h2.2M18.4 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M18 6l-1.6 1.6M7.6 16.4 6 18"/>',
+      moon: '<path d="M15.6 3.6A7.4 7.4 0 1 0 20.4 14 5.7 5.7 0 0 1 15.6 3.6z"/>',
+      brief: '<rect x="3.5" y="7.5" width="17" height="12" rx="2"/><path d="M9 7.5V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8v1.7M3.5 12.5h17"/>',
+      house: '<path d="M4 11.2 12 4.2l8 7"/><path d="M6.5 10.2V20h11V10.2"/><path d="M10 20v-4.5h4V20"/>',
+      flower: '<g fill="currentColor" stroke="none"><circle cx="12" cy="6.6" r="2.15"/><circle cx="16.7" cy="10" r="2.15"/><circle cx="14.9" cy="15.4" r="2.15"/><circle cx="9.1" cy="15.4" r="2.15"/><circle cx="7.3" cy="10" r="2.15"/><circle cx="12" cy="11.2" r="1.55"/></g>'
+    };
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (paths[name] || "") + "</svg>";
   }
 
   TABS.forEach(function (tab) {
@@ -578,7 +599,7 @@
     return weekdayHours(data, weekdayOf(iso));
   }
   function countYear(data, year) {
-    var counts = { day: 0, night: 0, off: 0, leave: 0, earlyDays: 0, earlyHours: 0 };
+    var counts = { day: 0, night: 0, off: 0, leave: 0 };
     var prefix = String(year) + "-";
     var shifts = data && data.shifts || {};
     Object.keys(shifts).forEach(function (iso) {
@@ -586,12 +607,8 @@
       if (shifts[iso] === "day") counts.day += 1;
       else if (shifts[iso] === "night") counts.night += 1;
       else if (shifts[iso] === "off") counts.off += 1;
-      if (isEarlyDay(data, iso)) {
-        counts.earlyDays += 1;
-        counts.earlyHours += dayEarlyHours(data, iso);
-      }
     });
-    counts.earlyHours = Math.round(counts.earlyHours * 100) / 100;
+    counts.attended = counts.day + counts.night;
     var seen = {};
     var leave = data && Array.isArray(data.leave) ? data.leave : [];
     leave.forEach(function (iso) {
@@ -612,12 +629,19 @@
     var year = displayedYear(host);
     if (year == null) return;
     var counts = countYear(stateNow(), year);
-    var line1 = "昼勤 " + counts.day + "日・夜勤 " + counts.night + "日・休日 " + counts.off + "日・年休 " + counts.leave + "日";
-    var line2 = "早出 " + counts.earlyDays + "日・早出時間 合計 " + formatHours(counts.earlyHours) + "時間";
-    var sig = year + "|" + line1 + "|" + line2;
+    var cards = [
+      ["day", "昼勤", "sun", counts.day],
+      ["night", "夜勤", "moon", counts.night],
+      ["work", "出勤", "brief", counts.attended],
+      ["off", "休日", "house", counts.off],
+      ["leave", "年休", "flower", counts.leave]
+    ];
+    var sig = year + "|" + cards.map(function (card) { return card[3]; }).join(",");
     if (host.getAttribute("data-sig") === sig) return;
     host.setAttribute("data-sig", sig);
-    host.innerHTML = '<div class="za-count" data-year-count="1"><div>' + esc(line1) + "</div><div>" + esc(line2) + "</div></div>";
+    host.innerHTML = '<div class="za-counts" data-year-count="1">' + cards.map(function (card) {
+      return '<div class="za-ycard za-' + card[0] + '"><span class="za-ico">' + yearIcon(card[2]) + '</span><span class="za-label">' + card[1] + '</span><span class="za-num">' + card[3] + "<span>日</span></span></div>";
+    }).join("") + "</div>";
   }
   function writeEarlyDay(iso, hours) {
     if (typeof window.__zangyoSet !== "function") return;
