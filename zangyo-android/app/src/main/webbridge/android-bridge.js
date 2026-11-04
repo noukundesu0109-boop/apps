@@ -88,7 +88,17 @@
     ".za-chip.on{background:#1f5c45;color:#fffdf8;border-color:#1f5c45;font-weight:700}",
     "#za-day-alarm{margin-top:14px}",
     "#za-day-alarm h3{margin:0 0 8px;font-size:14px}",
-    "#za-year-count .za-count{background:#fffdf8;border:1px solid #e4ddd0;border-radius:12px;padding:12px 14px;color:#1c1917;font-size:15px;line-height:1.5;font-weight:700}"
+    "#za-year-count .za-count{background:#fffdf8;border:1px solid #e4ddd0;border-radius:12px;padding:12px 14px;color:#1c1917;font-size:15px;line-height:1.5;font-weight:700}",
+    "#za-year-count .za-count div+div{margin-top:4px}",
+    ".za-ehours{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:6px 0}",
+    ".za-eh{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;color:#6f675c}",
+    ".za-eh input{width:100%;box-sizing:border-box;font-size:14px;padding:6px 2px;text-align:center;border:1px solid #e4ddd0;border-radius:8px;background:#fff;color:#1c1917}",
+    "#za-early-hours{margin-top:10px}",
+    "#za-early-hours .za-ehday{background:#fffdf8;border:1px solid #e4ddd0;border-radius:12px;padding:12px}",
+    "#za-early-hours label{display:flex;align-items:center;gap:8px;font-size:15px;color:#1c1917}",
+    "#za-early-hours input{width:96px;font-size:16px;padding:8px;border:1px solid #e4ddd0;border-radius:8px;background:#fff;color:#1c1917}",
+    "#za-early-hours p{margin:8px 0 0;color:#6f675c;font-size:13px;line-height:1.4}",
+    "#za-early-hours button{margin-top:8px;border:0;background:transparent;color:#1f5c45;font-size:14px;font-weight:700;padding:4px 0}"
   ].join("");
   document.head.appendChild(style);
 
@@ -274,7 +284,46 @@
       return '<button type="button" class="za-chip' + (on ? " on" : "") + '" data-act="weekday" data-dow="' + n + '" aria-pressed="' + (on ? "true" : "false") + '">' + name + "</button>";
     }).join("");
     return '<p class="za-muted">早出にする曜日</p><div class="za-chips">' + chips + "</div>" +
-      '<p class="za-muted">選んだ曜日の昼勤は、自動で早出の時刻になります。その日だけやめるときは、勤務の日を開いて早出をオフにしてください。</p>';
+      '<p class="za-muted">選んだ曜日の昼勤は、自動で早出の時刻になります。その日だけやめるときは、勤務の日を開いて早出をオフにしてください。</p>' +
+      weekdayHoursHtml();
+  }
+
+  function formatHours(value) {
+    var rounded = Math.round(Number(value) * 100) / 100;
+    if (!isFinite(rounded)) return "0";
+    return String(rounded);
+  }
+  function parseHours(raw) {
+    var text = String(raw == null ? "" : raw).trim().replace(/[０-９]/g, function (ch) {
+      return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0);
+    }).replace(/．/g, ".").replace(/。/g, ".");
+    if (!text) return null;
+    var number = Number(text);
+    if (!isFinite(number) || number < 0) return null;
+    return Math.min(24, Math.round(number * 100) / 100);
+  }
+  function weekdayHoursHtml() {
+    var data = stateNow() || {};
+    var map = data.earlyHoursWeekday || {};
+    var names = ["月", "火", "水", "木", "金", "土", "日"];
+    var inputs = names.map(function (name, index) {
+      var dow = index + 1;
+      var value = map[dow] != null ? map[dow] : map[String(dow)];
+      var shown = value != null && Number(value) > 0 ? formatHours(value) : "";
+      return '<label class="za-eh"><span>' + name + '</span><input type="number" min="0" max="24" step="0.25" inputmode="decimal" data-early-hours="' + dow + '" value="' + esc(shown) + '" aria-label="' + name + 'の早出時間" placeholder="0"></label>';
+    }).join("");
+    return '<p class="za-muted">曜日ごとの早出時間（時間）</p><div class="za-ehours">' + inputs + "</div>" +
+      '<p class="za-muted">空欄は 0 時間です。早出の日には、その曜日の時間が入ります。その日だけ変えるときは、勤務の日を開いて直してください。</p>';
+  }
+  function commitWeekdayHours(dow, raw) {
+    var hours = parseHours(raw);
+    if (typeof window.__zangyoSet !== "function") return;
+    window.__zangyoSet(function (state) {
+      var map = Object.assign({}, state.earlyHoursWeekday || {});
+      if (hours == null || hours === 0) delete map[String(dow)];
+      else map[String(dow)] = hours;
+      return Object.assign({}, state, { earlyHoursWeekday: map });
+    });
   }
 
   function commitAlarms(alarms) {
@@ -323,6 +372,10 @@
 
   panel.addEventListener("change", function (event) {
     var target = event.target;
+    if (target.dataset && target.dataset.earlyHours) {
+      commitWeekdayHours(Number(target.dataset.earlyHours), target.value);
+      return;
+    }
     if (target.dataset && target.dataset.act === "next-notice") {
       noticeOn = !!target.checked;
       try {
@@ -490,8 +543,42 @@
     var date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
     return date.getUTCFullYear() === parts[0] && date.getUTCMonth() === parts[1] - 1 && date.getUTCDate() === parts[2];
   }
+  function weekdayOf(iso) {
+    var parts = iso.split("-").map(Number);
+    var dow = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])).getUTCDay();
+    return dow === 0 ? 7 : dow;
+  }
+  function hasDate(list, iso) {
+    return Array.isArray(list) && list.indexOf(iso) >= 0;
+  }
+  function isEarlyDay(data, iso) {
+    var shifts = data && data.shifts || {};
+    if (shifts[iso] !== "day") return false;
+    if (hasDate(data.earlySkip, iso)) return false;
+    if (hasDate(data.early, iso)) return true;
+    if (!realDate(iso)) return false;
+    var weekdays = data.earlyWeekdays || [];
+    var dow = weekdayOf(iso);
+    return weekdays.indexOf(dow) >= 0 || weekdays.indexOf(String(dow)) >= 0;
+  }
+  function weekdayHours(data, dow) {
+    var map = data && data.earlyHoursWeekday || {};
+    var value = map[dow] != null ? map[dow] : map[String(dow)];
+    var number = Number(value);
+    if (!isFinite(number) || number <= 0) return 0;
+    return Math.min(24, Math.round(number * 100) / 100);
+  }
+  function dayEarlyHours(data, iso) {
+    if (!isEarlyDay(data, iso)) return 0;
+    var map = data && data.earlyHoursDay || {};
+    if (Object.prototype.hasOwnProperty.call(map, iso)) {
+      var number = Number(map[iso]);
+      if (isFinite(number) && number >= 0) return Math.min(24, Math.round(number * 100) / 100);
+    }
+    return weekdayHours(data, weekdayOf(iso));
+  }
   function countYear(data, year) {
-    var counts = { day: 0, night: 0, off: 0, leave: 0 };
+    var counts = { day: 0, night: 0, off: 0, leave: 0, earlyDays: 0, earlyHours: 0 };
     var prefix = String(year) + "-";
     var shifts = data && data.shifts || {};
     Object.keys(shifts).forEach(function (iso) {
@@ -499,7 +586,12 @@
       if (shifts[iso] === "day") counts.day += 1;
       else if (shifts[iso] === "night") counts.night += 1;
       else if (shifts[iso] === "off") counts.off += 1;
+      if (isEarlyDay(data, iso)) {
+        counts.earlyDays += 1;
+        counts.earlyHours += dayEarlyHours(data, iso);
+      }
     });
+    counts.earlyHours = Math.round(counts.earlyHours * 100) / 100;
     var seen = {};
     var leave = data && Array.isArray(data.leave) ? data.leave : [];
     leave.forEach(function (iso) {
@@ -520,17 +612,71 @@
     var year = displayedYear(host);
     if (year == null) return;
     var counts = countYear(stateNow(), year);
-    var text = "昼勤 " + counts.day + "日・夜勤 " + counts.night + "日・休日 " + counts.off + "日・年休 " + counts.leave + "日";
-    if (host.getAttribute("data-sig") === year + "|" + text) return;
-    host.setAttribute("data-sig", year + "|" + text);
-    host.innerHTML = '<div class="za-count" data-year-count="1">' + esc(text) + "</div>";
+    var line1 = "昼勤 " + counts.day + "日・夜勤 " + counts.night + "日・休日 " + counts.off + "日・年休 " + counts.leave + "日";
+    var line2 = "早出 " + counts.earlyDays + "日・早出時間 合計 " + formatHours(counts.earlyHours) + "時間";
+    var sig = year + "|" + line1 + "|" + line2;
+    if (host.getAttribute("data-sig") === sig) return;
+    host.setAttribute("data-sig", sig);
+    host.innerHTML = '<div class="za-count" data-year-count="1"><div>' + esc(line1) + "</div><div>" + esc(line2) + "</div></div>";
   }
-  window.__zangyoOnData = function () { renderYearCount(); };
+  function writeEarlyDay(iso, hours) {
+    if (typeof window.__zangyoSet !== "function") return;
+    window.__zangyoSet(function (state) {
+      var map = Object.assign({}, state.earlyHoursDay || {});
+      if (hours == null) delete map[iso];
+      else map[iso] = hours;
+      return Object.assign({}, state, { earlyHoursDay: map });
+    });
+  }
+  function renderEarlyHours() {
+    var host = document.getElementById("za-early-hours");
+    if (!host) return;
+    var iso = host.getAttribute("data-day");
+    if (!iso) return;
+    var data = stateNow() || {};
+    if (!isEarlyDay(data, iso)) {
+      if (host.getAttribute("data-sig") === iso + "|off") return;
+      host.setAttribute("data-sig", iso + "|off");
+      host.innerHTML = "";
+      return;
+    }
+    var base = weekdayHours(data, weekdayOf(iso));
+    var map = data.earlyHoursDay || {};
+    var override = Object.prototype.hasOwnProperty.call(map, iso);
+    var shown = override ? formatHours(map[iso]) : (base > 0 ? formatHours(base) : "");
+    var sig = iso + "|" + shown + "|" + (override ? "1" : "0") + "|" + base;
+    if (host.getAttribute("data-sig") === sig) return;
+    host.setAttribute("data-sig", sig);
+    host.innerHTML =
+      '<div class="za-ehday">' +
+      '<label>この日の早出時間<input type="number" min="0" max="24" step="0.25" inputmode="decimal" data-early-day="' + esc(iso) + '" value="' + esc(shown) + '" aria-label="この日の早出時間" placeholder="0"></label>' +
+      "<p>" + (override ? "この日だけの時間です。" : "曜日の設定です。直すと、この日だけ変わります。") + " 空欄にすると、曜日の設定に戻ります。</p>" +
+      (override ? '<button type="button" data-early-clear="' + esc(iso) + '">曜日の設定に戻す</button>' : "") +
+      "</div>";
+  }
+  window.__zangyoOnData = function () {
+    renderYearCount();
+    renderEarlyHours();
+  };
 
   document.addEventListener("change", function (event) {
     var target = event.target;
-    if (!target || target.tagName !== "SELECT" || !document.getElementById("za-year-count")) return;
+    if (!target) return;
+    if (target.getAttribute && target.getAttribute("data-early-day")) {
+      var iso = target.getAttribute("data-early-day");
+      var data = stateNow() || {};
+      var parsed = parseHours(target.value);
+      var base = weekdayHours(data, weekdayOf(iso));
+      writeEarlyDay(iso, parsed == null || parsed === base ? null : parsed);
+      return;
+    }
+    if (target.tagName !== "SELECT" || !document.getElementById("za-year-count")) return;
     renderYearCount();
+  }, true);
+  document.addEventListener("click", function (event) {
+    var target = event.target.closest && event.target.closest("[data-early-clear]");
+    if (!target) return;
+    writeEarlyDay(target.getAttribute("data-early-clear"), null);
   }, true);
 
   var appRoot = document.getElementById("root");
@@ -538,6 +684,7 @@
     new MutationObserver(function () {
       markCalendar();
       renderDayAlarm();
+      renderEarlyHours();
       renderYearCount();
     }).observe(appRoot, { childList: true, subtree: true });
   }

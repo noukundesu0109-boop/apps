@@ -13,8 +13,8 @@ android {
         applicationId = "dev.nossam.zangyo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.0.9"
+        versionCode = 11
+        versionName = "1.1.0"
     }
 
     buildTypes {
@@ -75,6 +75,8 @@ val prepareWeb = tasks.register("prepareZangyoWeb") {
         check(index.contains("enabled:e.enabled===!1")) { "alarm on/off was not kept" }
         check(index.contains("__zangyoDriveDone")) { "drive save was not switched to Android sign-in" }
         check(index.contains("za-year-count")) { "year day count was not injected" }
+        check(index.contains("za-early-hours")) { "per-day early hours field was not injected" }
+        check(index.contains("earlyHoursWeekday:eh")) { "weekday early hours were not kept in backups" }
         check(index.contains("新しい1件だけを残し")) { "drive keep-one text was not updated" }
         check(!index.contains("serviceWorker.register")) { "service worker registration still present" }
     }
@@ -136,7 +138,7 @@ fun patchIndex(html: String): String {
     text = replaceOne(
         text,
         """mt=e=>{let t=pt(e);return{...t,early:ft(t.early).filter(e=>t.shifts[e]===`day`),alarms:dt(t.alarms)}}""",
-        """mt=e=>{let t=pt(e),da={};if(t.dayAlarms&&typeof t.dayAlarms==`object`&&!Array.isArray(t.dayAlarms))for(let k of Object.keys(t.dayAlarms)){if(!ct.test(k))continue;let v=t.dayAlarms[k];if(!v||typeof v!=`object`)continue;if(v.mute){da[k]={mute:!0,times:[]};continue}let times=Array.isArray(v.times)?v.times.filter(e=>e&&typeof e==`object`).map(e=>({label:String(e.label??``),time:/^\d{2}:\d{2}$/.test(e.time)?e.time:``,enabled:e.enabled===!1?!1:!0})):[] ;if(times.length)da[k]={mute:!1,times}}let ew=Array.isArray(t.earlyWeekdays)?[...new Set(t.earlyWeekdays.map(Number).filter(n=>n>=1&&n<=7))].sort((a,b)=>a-b):[],es=ft(t.earlySkip||[]);return{...t,early:ft(t.early).filter(e=>t.shifts[e]===`day`),alarms:dt(t.alarms),dayAlarms:da,earlyWeekdays:ew,earlySkip:es}}""",
+        """mt=e=>{let t=pt(e),da={};if(t.dayAlarms&&typeof t.dayAlarms==`object`&&!Array.isArray(t.dayAlarms))for(let k of Object.keys(t.dayAlarms)){if(!ct.test(k))continue;let v=t.dayAlarms[k];if(!v||typeof v!=`object`)continue;if(v.mute){da[k]={mute:!0,times:[]};continue}let times=Array.isArray(v.times)?v.times.filter(e=>e&&typeof e==`object`).map(e=>({label:String(e.label??``),time:/^\d{2}:\d{2}$/.test(e.time)?e.time:``,enabled:e.enabled===!1?!1:!0})):[] ;if(times.length)da[k]={mute:!1,times}}let ew=Array.isArray(t.earlyWeekdays)?[...new Set(t.earlyWeekdays.map(Number).filter(n=>n>=1&&n<=7))].sort((a,b)=>a-b):[],es=ft(t.earlySkip||[]);let eh={},ed={};if(t.earlyHoursWeekday&&typeof t.earlyHoursWeekday==`object`&&!Array.isArray(t.earlyHoursWeekday))for(let k of [`1`,`2`,`3`,`4`,`5`,`6`,`7`]){let n=Number(t.earlyHoursWeekday[k]);if(Number.isFinite(n)&&n>0)eh[k]=Math.min(24,Math.round(n*100)/100)}if(t.earlyHoursDay&&typeof t.earlyHoursDay==`object`&&!Array.isArray(t.earlyHoursDay))for(let k of Object.keys(t.earlyHoursDay)){if(!ct.test(k))continue;let n=Number(t.earlyHoursDay[k]);if(Number.isFinite(n)&&n>=0)ed[k]=Math.min(24,Math.round(n*100)/100)}return{...t,early:ft(t.early).filter(e=>t.shifts[e]===`day`),alarms:dt(t.alarms),dayAlarms:da,earlyWeekdays:ew,earlySkip:es,earlyHoursWeekday:eh,earlyHoursDay:ed}}""",
     )
     text = replaceOne(
         text,
@@ -152,6 +154,11 @@ fun patchIndex(html: String): String {
         text,
         """i===`year`&&(0,A.jsxs)(A.Fragment,{children:[(0,A.jsxs)(`div`,{className:`flex items-center justify-between`,children:""",
         """i===`year`&&(0,A.jsxs)(A.Fragment,{children:[(0,A.jsx)(`div`,{id:`za-year-count`,className:`mb-3`}),(0,A.jsxs)(`div`,{className:`flex items-center justify-between`,children:""",
+    )
+    text = replaceOne(
+        text,
+        """`オフ`})]}):null,C.has(x)?""",
+        """`オフ`})]}):null,(0,A.jsx)(`div`,{id:`za-early-hours`,"data-day":x}),C.has(x)?""",
     )
     text = moveLeaveSettings(text)
     return text

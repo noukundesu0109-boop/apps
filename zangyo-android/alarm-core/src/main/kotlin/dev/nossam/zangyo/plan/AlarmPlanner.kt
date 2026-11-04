@@ -2,6 +2,8 @@ package dev.nossam.zangyo.plan
 
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.min
+import kotlin.math.round
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -161,7 +163,31 @@ object AlarmPlanner {
             }
         }
         val leave = data.leave.count { it.startsWith(prefix) && isIsoDate(it) }
-        return YearShiftCounts(day, night, off, leave)
+        var earlyDays = 0
+        var earlyHours = 0.0
+        for ((iso, _) in data.shifts) {
+            if (!iso.startsWith(prefix) || !isIsoDate(iso) || !isEarly(data, iso)) continue
+            earlyDays += 1
+            earlyHours += earlyHours(data, iso)
+        }
+        return YearShiftCounts(day, night, off, leave, earlyDays, roundHours(earlyHours))
+    }
+
+    /** Hours for one early day. A per-day value wins over the weekday setting. Not early means 0. */
+    fun earlyHours(data: WorkData, iso: String): Double {
+        if (!isEarly(data, iso)) return 0.0
+        data.earlyHoursDay[iso]?.let { return it }
+        val date = try {
+            LocalDate.parse(iso)
+        } catch (_: DateTimeParseException) {
+            return 0.0
+        }
+        return data.earlyHoursWeekday[date.dayOfWeek.value] ?: 0.0
+    }
+
+    fun roundHours(value: Double): Double {
+        if (!value.isFinite() || value < 0.0) return 0.0
+        return round(value * 100.0) / 100.0
     }
 
     /** The soonest alarm that has not rung yet. Skipped ones are already absent from [alarms]. */
@@ -199,7 +225,14 @@ object AlarmPlanner {
     }
 }
 
-data class YearShiftCounts(val day: Int, val night: Int, val off: Int, val leave: Int)
+data class YearShiftCounts(
+    val day: Int,
+    val night: Int,
+    val off: Int,
+    val leave: Int,
+    val earlyDays: Int = 0,
+    val earlyHours: Double = 0.0,
+)
 
 data class AlarmRow(val label: String, val time: String, val enabled: Boolean = true)
 
@@ -213,6 +246,8 @@ data class WorkData(
     val dayAlarms: Map<String, DayOverride> = emptyMap(),
     val earlyWeekdays: Set<Int> = emptySet(),
     val earlySkip: Set<String> = emptySet(),
+    val earlyHoursWeekday: Map<Int, Double> = emptyMap(),
+    val earlyHoursDay: Map<String, Double> = emptyMap(),
 )
 
 data class PlannedAlarm(
@@ -250,6 +285,8 @@ fun parseWorkData(json: String): WorkData {
         dayAlarms = readDayAlarms(root.optJSONObject("dayAlarms")),
         earlyWeekdays = readWeekdays(root.opt("earlyWeekdays")),
         earlySkip = readDates(root.opt("earlySkip")),
+        earlyHoursWeekday = readWeekdayHours(root.optJSONObject("earlyHoursWeekday")),
+        earlyHoursDay = readDayHours(root.optJSONObject("earlyHoursDay")),
     )
 }
 
@@ -293,6 +330,43 @@ private fun readDayAlarms(raw: JSONObject?): Map<String, DayOverride> {
         if (times.isNotEmpty()) out[key] = DayOverride(mute = false, times = times)
     }
     return out
+}
+
+private fun readWeekdayHours(raw: JSONObject?): Map<Int, Double> {
+    if (raw == null) return emptyMap()
+    val out = linkedMapOf<Int, Double>()
+    val keys = raw.keys()
+    while (keys.hasNext()) {
+        val key = keys.next()
+        val dow = key.toIntOrNull() ?: continue
+        if (dow !in 1..7) continue
+        val hours = readHour(raw.opt(key)) ?: continue
+        if (hours > 0.0) out[dow] = hours
+    }
+    return out
+}
+
+private fun readDayHours(raw: JSONObject?): Map<String, Double> {
+    if (raw == null) return emptyMap()
+    val out = linkedMapOf<String, Double>()
+    val keys = raw.keys()
+    while (keys.hasNext()) {
+        val key = keys.next()
+        if (!isIsoDate(key)) continue
+        val hours = readHour(raw.opt(key)) ?: continue
+        out[key] = hours
+    }
+    return out
+}
+
+private fun readHour(raw: Any?): Double? {
+    val number = when (raw) {
+        is Number -> raw.toDouble()
+        is String -> raw.toString().trim().toDoubleOrNull()
+        else -> null
+    } ?: return null
+    if (!number.isFinite() || number < 0.0) return null
+    return AlarmPlanner.roundHours(min(number, 24.0))
 }
 
 private fun readWeekdays(raw: Any?): Set<Int> {

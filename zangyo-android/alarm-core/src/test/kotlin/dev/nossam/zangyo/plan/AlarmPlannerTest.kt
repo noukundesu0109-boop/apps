@@ -499,6 +499,61 @@ class AlarmPlannerTest {
     }
 
     @Test
+    fun weekdayEarlyHoursApplyUntilADayOverridesThem() {
+        val data = work(
+            shifts = mapOf(
+                "2026-11-02" to "day",
+                "2026-11-03" to "day",
+                "2026-11-04" to "day",
+                "2026-11-09" to "day",
+                "2026-11-16" to "day",
+                "2026-11-05" to "night",
+                "2025-11-02" to "day",
+            ),
+            early = setOf("2026-11-04"),
+        ).copy(
+            earlySkip = setOf("2026-11-16"),
+            earlyWeekdays = setOf(1),
+            earlyHoursWeekday = mapOf(1 to 0.25, 2 to 0.5, 3 to 0.5),
+            earlyHoursDay = mapOf("2026-11-09" to 1.0, "2026-11-02" to 0.0),
+        )
+        assertEquals(0.0, AlarmPlanner.earlyHours(data, "2026-11-02"), 0.0)
+        assertEquals(0.0, AlarmPlanner.earlyHours(data, "2026-11-03"), 0.0)
+        assertEquals(0.5, AlarmPlanner.earlyHours(data, "2026-11-04"), 0.0)
+        assertEquals(1.0, AlarmPlanner.earlyHours(data, "2026-11-09"), 0.0)
+        assertEquals(0.0, AlarmPlanner.earlyHours(data, "2026-11-16"), 0.0)
+        assertEquals(0.0, AlarmPlanner.earlyHours(data, "2026-11-05"), 0.0)
+        val year = AlarmPlanner.countYear(data, 2026)
+        assertEquals(3, year.earlyDays)
+        assertEquals(1.5, year.earlyHours, 0.0)
+        assertEquals(0, AlarmPlanner.countYear(data, 2025).earlyDays)
+    }
+
+    @Test
+    fun oldBackupWithoutEarlyHoursStillLoads() {
+        val data = parseWorkData(
+            """
+            {"shifts":{"2026-11-02":"day","2026-11-03":"night"},"early":["2026-11-02"],"leave":[]}
+            """.trimIndent(),
+        )
+        assertTrue(data.earlyHoursWeekday.isEmpty())
+        assertTrue(data.earlyHoursDay.isEmpty())
+        assertEquals(0.0, AlarmPlanner.earlyHours(data, "2026-11-02"), 0.0)
+        val restored = parseWorkData(
+            """
+            {"shifts":{"2026-11-02":"day","2026-11-04":"day"},
+             "earlyWeekdays":[1],
+             "earlyHoursWeekday":{"1":0.25,"8":9,"2":-1,"3":"x","5":"0.5"},
+             "earlyHoursDay":{"2026-11-04":0,"2026-02-29":1,"bad":2}}
+            """.trimIndent(),
+        )
+        assertEquals(mapOf(1 to 0.25, 5 to 0.5), restored.earlyHoursWeekday)
+        assertEquals(mapOf("2026-11-04" to 0.0), restored.earlyHoursDay)
+        assertEquals(0.0, AlarmPlanner.earlyHours(restored, "2026-11-04"), 0.0)
+        assertEquals(0.3, AlarmPlanner.roundHours(0.1 + 0.2), 0.0)
+    }
+
+    @Test
     fun leapDayCountsOnlyInALeapYear() {
         val data = work(
             shifts = mapOf("2024-02-29" to "day", "2026-02-29" to "night"),
