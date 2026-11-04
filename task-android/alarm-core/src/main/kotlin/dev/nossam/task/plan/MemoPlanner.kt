@@ -44,6 +44,8 @@ object MemoPlanner {
                 time = memo.time!!,
                 title = title,
                 detail = "${formatJapaneseDate(date)} ${memo.time}",
+                itemId = memo.id,
+                kind = KIND_MEMO,
             )
         }
         return out.sortedWith(compareBy({ it.triggerAtMillis }, { it.id }))
@@ -181,6 +183,13 @@ object MemoPlanner {
                 time = timeText!!,
                 title = title.ifBlank { "予定" },
                 detail = "${formatJapaneseDate(day)} $timeText",
+                itemId = id,
+                kind = when (idPrefix) {
+                    "c" -> KIND_CLEAN
+                    "b" -> KIND_BOUSAI
+                    else -> "tab"
+                },
+                tabId = ringKey,
             )
         }
         for (item in board.cleaning) {
@@ -197,6 +206,45 @@ object MemoPlanner {
         }
         return (memoAlarms + extra).sortedWith(compareBy({ it.triggerAtMillis }, { it.id }))
     }
+
+    /** The next timed item still ahead today, among tabs that ring. */
+    fun nextToday(board: TaskBoard, now: ZonedDateTime): PlannedMemoAlarm? {
+        val today = now.withZoneSameInstant(ZONE).toLocalDate().toString()
+        return planAlerts(board, now).firstOrNull { it.date == today }
+    }
+
+    /** A sounding notice before the usual alarm. Minutes come from the memo, or from the shared setting. */
+    fun planLead(board: TaskBoard, now: ZonedDateTime): List<PlannedMemoAlarm> {
+        val nowMillis = now.withZoneSameInstant(ZONE).toInstant().toEpochMilli()
+        val out = ArrayList<PlannedMemoAlarm>()
+        for (alarm in planAlerts(board, now)) {
+            val minutes = leadFor(board, alarm)
+            if (minutes <= 0) continue
+            val at = alarm.triggerAtMillis - minutes * 60_000L
+            if (at <= nowMillis) continue
+            out += alarm.copy(
+                id = "p|${alarm.id}",
+                triggerAtMillis = at,
+                detail = leadLabel(minutes),
+                leadMinutes = minutes,
+            )
+        }
+        return out
+    }
+
+    fun leadFor(board: TaskBoard, alarm: PlannedMemoAlarm): Int {
+        if (alarm.kind == KIND_MEMO) {
+            val own = board.memos.firstOrNull { it.id == alarm.itemId }?.lead
+            if (own != null && own in LEAD_CHOICES) return own
+        }
+        return if (board.leadMinutes in LEAD_CHOICES) board.leadMinutes else DEFAULT_LEAD
+    }
+
+    fun leadLabel(minutes: Int): String = if (minutes == 60) "1時間前" else "${minutes}分前"
+
+    fun nextTaskText(alarm: PlannedMemoAlarm): String = "${alarm.time} ${alarm.title}"
+
+    fun nextTaskNotice(alarm: PlannedMemoAlarm): String = "次のタスク ${nextTaskText(alarm)}"
 
     fun extraKind(tabId: String) = "x:$tabId"
 
@@ -236,6 +284,8 @@ object MemoPlanner {
     const val KIND_CLEAN = "clean"
     const val KIND_BOUSAI = "bousai"
     const val KIND_CAR = "car"
+    const val DEFAULT_LEAD = 10
+    val LEAD_CHOICES = setOf(0, 5, 10, 15, 30, 60)
 
     fun parseTime(text: String?): LocalTime? {
         if (text == null || !TIME.matches(text)) return null
@@ -261,6 +311,7 @@ data class MemoEntry(
     val due: String?,
     val time: String?,
     val done: Boolean,
+    val lead: Int? = null,
 )
 
 data class PlannedMemoAlarm(
@@ -270,6 +321,10 @@ data class PlannedMemoAlarm(
     val time: String,
     val title: String,
     val detail: String,
+    val itemId: String = "",
+    val kind: String = MemoPlanner.KIND_MEMO,
+    val tabId: String = "",
+    val leadMinutes: Int = 0,
 )
 
 data class TaskBoard(
@@ -279,6 +334,8 @@ data class TaskBoard(
     val cars: List<CarEntry> = emptyList(),
     val extras: List<ExtraEntry> = emptyList(),
     val rings: Map<String, Boolean> = emptyMap(),
+    val leadMinutes: Int = MemoPlanner.DEFAULT_LEAD,
+    val nextTaskNotice: Boolean = true,
 )
 
 data class CleanEntry(
@@ -378,6 +435,12 @@ fun parseBoard(json: String): TaskBoard {
         cars = cars,
         extras = readExtras(root.optJSONArray("tabs")),
         rings = readRings(root.optJSONObject("rings")),
+        leadMinutes = readLead(root.opt("leadMinutes")) ?: MemoPlanner.DEFAULT_LEAD,
+        nextTaskNotice = if (root.has("nextTaskNotice") && root.opt("nextTaskNotice") is Boolean) {
+            root.getBoolean("nextTaskNotice")
+        } else {
+            true
+        },
     )
 }
 
@@ -471,6 +534,75 @@ private fun readExtras(tabs: JSONArray?): List<ExtraEntry> {
     return out
 }
 
+private fun readLead(raw: Any?): Int? {
+    val number = when (raw) {
+        is Number -> raw.toInt()
+        is String -> raw.toIntOrNull()
+        else -> null
+    } ?: return null
+    return number.takeIf { it in MemoPlanner.LEAD_CHOICES }
+}
+
+fun completeOccurrence(json: String, kind: String, itemId: String, tabId: String, today: String): String {
+    if (MemoPlanner.parseDate(today) == null || itemId.isBlank()) return json
+    val root = try {
+        JSONObject(json)
+    } catch (_: Exception) {
+        return json
+    }
+    when (kind) {
+        MemoPlanner.KIND_MEMO -> markMemoDone(root.optJSONArray("memos"), itemId, today)
+        MemoPlanner.KIND_CLEAN -> markChoreDone(root.optJSONArray("cleaning"), itemId, today)
+        MemoPlanner.KIND_BOUSAI -> clearBousai(root.optJSONArray("bousai"), itemId)
+        else -> markTabDone(root.optJSONArray("tabs"), itemId, tabId, today)
+    }
+    return root.toString()
+}
+
+private fun markMemoDone(array: JSONArray?, itemId: String, today: String) {
+    if (array == null) return
+    for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        if (item.optString("id") != itemId) continue
+        if (MemoPlanner.parseDate(item.optString("done")) == null) item.put("done", today)
+    }
+}
+
+private fun markChoreDone(array: JSONArray?, itemId: String, today: String) {
+    if (array == null) return
+    for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        if (item.optString("id") != itemId) continue
+        item.put("done", today)
+        item.put("shift", JSONObject.NULL)
+    }
+}
+
+private fun clearBousai(array: JSONArray?, itemId: String) {
+    if (array == null) return
+    for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        if (item.optString("id") != itemId) continue
+        item.put("due", JSONObject.NULL)
+        item.put("shift", JSONObject.NULL)
+    }
+}
+
+private fun markTabDone(tabs: JSONArray?, itemId: String, tabId: String, today: String) {
+    if (tabs == null) return
+    for (t in 0 until tabs.length()) {
+        val tab = tabs.optJSONObject(t) ?: continue
+        if (tabId.isNotBlank() && tab.optString("id") != tabId) continue
+        val items = tab.optJSONArray("items") ?: continue
+        for (i in 0 until items.length()) {
+            val item = items.optJSONObject(i) ?: continue
+            if (item.optString("id") != itemId) continue
+            item.put("done", today)
+            item.put("shift", JSONObject.NULL)
+        }
+    }
+}
+
 private fun readRings(obj: JSONObject?): Map<String, Boolean> {
     if (obj == null) return emptyMap()
     val out = LinkedHashMap<String, Boolean>()
@@ -503,7 +635,7 @@ private fun readMemos(array: JSONArray): List<MemoEntry> {
         val time = item.optString("time").takeIf { MemoPlanner.parseTime(it) != null }
         val done = item.optString("done").let { MemoPlanner.parseDate(it) != null }
         val id = item.optString("id").ifBlank { "m$i" }
-        out += MemoEntry(id = id, text = text, due = due, time = time, done = done)
+        out += MemoEntry(id = id, text = text, due = due, time = time, done = done, lead = readLead(item.opt("lead")))
     }
     return out
 }

@@ -120,6 +120,8 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
                 pageReady = true
                 deliver("window.__taskPermStatus", PermissionGate.statusJson(this@MainActivity))
                 UiBridge.lastSchedule?.let { deliver("window.__taskShowSchedule", it) }
+                flushDone()
+                webView.postDelayed({ flushDone() }, 400)
                 maybeStartVoice()
             }
         }
@@ -184,6 +186,7 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         webView.addJavascriptInterface(TaskJsBridge(applicationContext, this), "TaskNative")
         UiBridge.scheduleSink = scheduleSink
         UiBridge.permissionSink = permissionSink
+        UiBridge.doneSink = doneSink
         onBackPressedDispatcher.addCallback(
             this,
             object : OnBackPressedCallback(true) {
@@ -455,6 +458,22 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
     private val permissionSink: (String) -> Unit = { json ->
         runOnUiThread { deliver("window.__taskPermStatus", json) }
     }
+    private val doneSink: (String) -> Unit = { json ->
+        runOnUiThread { deliver("window.__taskMarkDone", json) }
+    }
+
+    private fun flushDone() {
+        if (!pageReady) return
+        val pending = AlarmStore(applicationContext).readPendingDone()
+        for (item in pending) {
+            val json = org.json.JSONObject()
+                .put("kind", item.kind)
+                .put("id", item.id)
+                .put("tabId", item.tabId)
+                .toString()
+            deliver("window.__taskMarkDone", json)
+        }
+    }
 
     override fun onDestroy() {
         commandToken += 1
@@ -466,6 +485,7 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         speech = null
         if (UiBridge.scheduleSink === scheduleSink) UiBridge.scheduleSink = null
         if (UiBridge.permissionSink === permissionSink) UiBridge.permissionSink = null
+        if (UiBridge.doneSink === doneSink) UiBridge.doneSink = null
         webView.destroy()
         super.onDestroy()
     }

@@ -5,6 +5,13 @@
     <string name="channel_desc">メモの時刻アラーム</string>
     <string name="summary_channel_name">朝のまとめ</string>
     <string name="summary_channel_desc">その日のメモと、掃除・防災・車の予定を知らせます</string>
+    <string name="next_task_channel">次のタスク</string>
+    <string name="next_task_channel_desc">今日の次の予定を、通知に出します</string>
+    <string name="next_task_title">次のタスク</string>
+    <string name="next_task_done">済み</string>
+    <string name="ahead_channel">事前通知</string>
+    <string name="ahead_channel_desc">予定の少し前に知らせます</string>
+    <string name="ahead_title">まもなく</string>
     <string name="voice_label">声でメモ</string>
     <string name="voice_widget_desc">話して予定を入れます</string>
     <string name="voice_prompt">予定を話してください</string>

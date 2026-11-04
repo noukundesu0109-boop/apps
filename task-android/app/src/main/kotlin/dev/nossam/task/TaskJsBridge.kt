@@ -70,6 +70,12 @@ class TaskJsBridge(
     fun getSummaryTime(): String = AlarmStore(appContext).readSummaryTime()
 
     @JavascriptInterface
+    fun ackDone(kind: String, id: String) {
+        if (kind.length > 20 || id.length > 200) return
+        TaskAlarms.enqueue { TaskAlarms.acknowledgeDone(appContext, kind, id) }
+    }
+
+    @JavascriptInterface
     fun setSummaryTime(value: String) {
         if (value.length > 8) return
         TaskAlarms.enqueue { TaskAlarms.setSummaryTime(appContext, value) }

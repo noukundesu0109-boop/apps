@@ -4,6 +4,12 @@ import android.content.Context
 import org.json.JSONObject
 import java.io.File
 
+internal data class StoredDone(
+    val kind: String,
+    val id: String,
+    val tabId: String,
+)
+
 internal data class StoredSnooze(
     val id: String,
     val atMillis: Long,
@@ -80,6 +86,41 @@ internal class AlarmStore(context: Context) {
         } catch (_: Exception) {
             emptyMap()
         }
+    }
+
+    fun readPendingDone(): List<StoredDone> {
+        val text = read(file("pending-done.json")) ?: return emptyList()
+        return try {
+            val array = JSONObject(text).optJSONArray("items") ?: return emptyList()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    val id = item.optString("id")
+                    val kind = item.optString("kind")
+                    if (id.isBlank() || kind.isBlank()) continue
+                    add(StoredDone(kind = kind, id = id, tabId = item.optString("tab")))
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun addPendingDone(done: StoredDone) {
+        val items = readPendingDone().filterNot { it.kind == done.kind && it.id == done.id } + done
+        writePendingDone(items)
+    }
+
+    fun removePendingDone(kind: String, id: String) {
+        writePendingDone(readPendingDone().filterNot { it.kind == kind && it.id == id })
+    }
+
+    private fun writePendingDone(items: List<StoredDone>) {
+        val array = org.json.JSONArray()
+        for (item in items) {
+            array.put(JSONObject().put("kind", item.kind).put("id", item.id).put("tab", item.tabId))
+        }
+        write(file("pending-done.json"), JSONObject().put("items", array).toString())
     }
 
     fun writeCodes(codes: Map<String, Int>) {

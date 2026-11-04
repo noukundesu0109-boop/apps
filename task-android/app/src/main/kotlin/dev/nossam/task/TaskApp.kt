@@ -10,6 +10,8 @@ class TaskApp : Application() {
         super.onCreate()
         ensureAlarmChannel(this)
         ensureSummaryChannel(this)
+        ensureNextTaskChannel(this)
+        ensureAheadChannel(this)
     }
 }
 
@@ -22,6 +24,24 @@ internal fun ensureSummaryChannel(context: android.content.Context) {
         NotificationManager.IMPORTANCE_DEFAULT,
     ).apply {
         description = context.getString(R.string.summary_channel_desc)
+        lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+    }
+    manager.createNotificationChannel(channel)
+}
+
+internal fun ensureNextTaskChannel(context: android.content.Context) {
+    NextTaskNotice.ensureChannel(context)
+}
+
+internal fun ensureAheadChannel(context: android.content.Context) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    val manager = context.getSystemService(NotificationManager::class.java) ?: return
+    val channel = NotificationChannel(
+        AlarmIntents.LEAD_CHANNEL_ID,
+        context.getString(R.string.ahead_channel),
+        NotificationManager.IMPORTANCE_HIGH,
+    ).apply {
+        description = context.getString(R.string.ahead_channel_desc)
         lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
     }
     manager.createNotificationChannel(channel)

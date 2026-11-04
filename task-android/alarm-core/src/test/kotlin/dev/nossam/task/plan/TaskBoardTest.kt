@@ -202,6 +202,74 @@ class TaskBoardTest {
         assertEquals(parseMemos("""{"memos":[{"id":"m1","text":"牛乳","due":"2026-11-06","done":null}]}""").map { it.id }, board.memos.map { it.id })
     }
 
+    @Test
+    fun nextTaskIsTheSoonestTimedItemStillAheadToday() {
+        val board = TaskBoard(
+            memos = listOf(
+                MemoEntry("m1", "病院", "2026-11-04", "18:30", done = false),
+                MemoEntry("m2", "済", "2026-11-04", "09:00", done = true),
+                MemoEntry("m3", "時刻なし", "2026-11-04", null, done = false),
+                MemoEntry("m4", "明日", "2026-11-05", "08:00", done = false),
+                MemoEntry("m5", "過ぎた", "2026-11-04", "08:00", done = false),
+            ),
+            cleaning = listOf(CleanEntry("c1", "居間 床", "2026-11-04", 0, time = "12:00")),
+            rings = mapOf("clean" to true),
+        )
+        val now = ZonedDateTime.of(2026, 11, 4, 10, 0, 0, 0, zone)
+        val next = MemoPlanner.nextToday(board, now)
+        assertEquals("居間 床", next!!.title)
+        assertEquals("12:00 居間 床", MemoPlanner.nextTaskText(next))
+        val memoOnly = board.copy(rings = emptyMap())
+        assertEquals("病院", MemoPlanner.nextToday(memoOnly, now)!!.title)
+        assertEquals("次のタスク 18:30 病院", MemoPlanner.nextTaskNotice(MemoPlanner.nextToday(memoOnly, now)!!))
+        assertEquals(null, MemoPlanner.nextToday(memoOnly, ZonedDateTime.of(2026, 11, 4, 19, 0, 0, 0, zone)))
+    }
+
+    @Test
+    fun leadNoticeUsesTheMemoOverrideOrTheSharedSetting() {
+        val board = parseBoard(
+            """
+            {"memos":[
+               {"id":"m1","text":"病院","due":"2026-11-04","time":"18:30","done":null,"lead":5},
+               {"id":"m2","text":"薬","due":"2026-11-04","time":"20:00","done":null}
+             ],
+             "cleaning":[{"id":"c1","place":"居間","task":"床","done":"2026-11-04","cycle":0,"time":"12:00"}],
+             "rings":{"clean":false},"leadMinutes":10,"nextTaskNotice":true}
+            """.trimIndent(),
+        )
+        assertEquals(10, board.leadMinutes)
+        assertEquals(true, board.nextTaskNotice)
+        assertEquals(5, board.memos.first { it.id == "m1" }.lead)
+        assertEquals(null, board.memos.first { it.id == "m2" }.lead)
+        val now = ZonedDateTime.of(2026, 11, 4, 10, 0, 0, 0, zone)
+        val leads = MemoPlanner.planLead(board, now)
+        assertEquals(listOf("p|m|m1|2026-11-04|18:30", "p|m|m2|2026-11-04|20:00"), leads.map { it.id })
+        assertEquals(5, leads[0].leadMinutes)
+        assertEquals(10, leads[1].leadMinutes)
+        assertEquals("5分前", leads[0].detail)
+        assertTrue(leads[0].triggerAtMillis < MemoPlanner.planAlerts(board, now).first { it.itemId == "m1" }.triggerAtMillis)
+        val none = board.copy(leadMinutes = 0)
+        assertTrue(MemoPlanner.planLead(none, now).none { it.itemId == "m2" })
+        assertEquals(listOf("病院"), MemoPlanner.planLead(none, now).map { it.title })
+        val old = parseBoard("""{"memos":[{"id":"m1","text":"病院","due":"2026-11-04","time":"18:30","done":null}]}""")
+        assertEquals(10, old.leadMinutes)
+        assertEquals(true, old.nextTaskNotice)
+        assertEquals(null, old.memos[0].lead)
+    }
+
+    @Test
+    fun markingDoneFromTheNoticeUpdatesTheStoredItem() {
+        val json = """{"memos":[{"id":"m1","text":"病院","due":"2026-11-04","time":"18:30","done":null}],"cleaning":[{"id":"c1","place":"居間","task":"床","done":"2026-10-01","cycle":30,"time":"09:00","shift":"2026-11-04"}],"bousai":[{"id":"b1","item":"水","due":"2026-11-04","time":"07:00"}]}"""
+        val memo = completeOccurrence(json, "memo", "m1", "", "2026-11-04")
+        assertTrue(memo.contains("\"done\":\"2026-11-04\""))
+        val clean = completeOccurrence(json, "clean", "c1", "", "2026-11-04")
+        val cleanBoard = parseBoard(clean)
+        assertEquals("2026-11-04", cleanBoard.cleaning[0].done)
+        assertEquals(null, cleanBoard.cleaning[0].shift)
+        val gear = parseBoard(completeOccurrence(json, "bousai", "b1", "", "2026-11-04"))
+        assertEquals(null, gear.bousai[0].due)
+    }
+
     private fun sample(): TaskBoard = TaskBoard(
         memos = listOf(
             MemoEntry("m1", "午後", "2026-11-06", "15:00", done = false),

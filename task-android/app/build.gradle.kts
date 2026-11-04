@@ -13,8 +13,8 @@ android {
         applicationId = "dev.nossam.task"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.3.1"
+        versionCode = 8
+        versionName = "1.4.0"
     }
 
     buildTypes {
@@ -81,6 +81,9 @@ val prepareWeb = tasks.register("prepareTaskWeb") {
         check(index.contains("data-voice")) { "voice button was not injected" }
         check(index.contains("__taskAddMemo")) { "voice save bridge was not injected" }
         check(index.contains("task-voice-host")) { "voice setting was not injected" }
+        check(index.contains("task-ahead-host")) { "advance notice setting was not injected" }
+        check(index.contains("data-memo-lead")) { "per-memo advance notice was not injected" }
+        check(index.contains("nextTaskNotice")) { "next task setting was not kept in backups" }
         check(index.contains("にずらし中")) { "postpone label was not injected" }
         check(index.contains("新しい1件だけを残し")) { "drive keep-one text was not updated" }
         check(!index.contains("serviceWorker.register")) { "service worker registration still present" }
@@ -113,37 +116,37 @@ fun patchIndex(html: String): String {
     text = replaceOne(
         text,
         """function wt(e,t){return{id:String(e?.id??`m${'$'}{t}-${'$'}{Date.now()}`),text:String(e?.text??``).trim(),due:ht(e?.due),done:ht(e?.done),at:Number.isFinite(e?.at)?e.at:0}}""",
-        """function wt(e,t){return{id:String(e?.id??`m${'$'}{t}-${'$'}{Date.now()}`),text:String(e?.text??``).trim(),due:ht(e?.due),time:/^\d{2}:\d{2}$/.test(e?.time)?e.time:null,done:ht(e?.done),at:Number.isFinite(e?.at)?e.at:0}}""",
+        """function wt(e,t){return{id:String(e?.id??`m${'$'}{t}-${'$'}{Date.now()}`),text:String(e?.text??``).trim(),due:ht(e?.due),time:/^\d{2}:\d{2}$/.test(e?.time)?e.time:null,lead:[0,5,10,15,30,60].includes(e?.lead)?e.lead:null,done:ht(e?.done),at:Number.isFinite(e?.at)?e.at:0}}""",
     )
     text = replaceOne(
         text,
         """D=(e,t,i)=>{Se(n=>[...n,{id:`m${'$'}{Date.now()}`,text:e,due:t,done:null,at:Date.now()}]);""",
-        """D=(e,t,i,tm)=>{let time=/^\d{2}:\d{2}$/.test(tm)?tm:null;Se(n=>[...n,{id:`m${'$'}{Date.now()}`,text:e,due:t,time,done:null,at:Date.now()}]);""",
+        """D=(e,t,i,tm,lead)=>{let time=/^\d{2}:\d{2}$/.test(tm)?tm:null;let ahead=[0,5,10,15,30,60].includes(lead)?lead:null;Se(n=>[...n,{id:`m${'$'}{Date.now()}`,text:e,due:t,time,lead:ahead,done:null,at:Date.now()}]);""",
     )
     text = replaceOne(
         text,
         """function en({memos:e,today:t,onAdd:n,onToggle:r,onEdit:i,frequent:a,onEditFreq:o}){let[s,c]=(0,l.useState)(``),[u,d]=(0,l.useState)(null),[f,p]=(0,l.useState)(!1),m=(0,l.useRef)(null),h=()=>{let e=s.trim();e&&(n(e,u),c(``),d(null)),m.current?.focus()}""",
-        """function en({memos:e,today:t,onAdd:n,onToggle:r,onEdit:i,frequent:a,onEditFreq:o}){let[s,c]=(0,l.useState)(``),[u,d]=(0,l.useState)(null),[tm,setTm]=(0,l.useState)(``),[f,p]=(0,l.useState)(!1),m=(0,l.useRef)(null);window.__taskSetMemoDate=function(v){d(v)};let h=()=>{let e=s.trim();e&&(n(e,u,!1,tm),c(``),d(null),setTm(``)),m.current?.focus()}""",
+        """function en({memos:e,today:t,onAdd:n,onToggle:r,onEdit:i,frequent:a,onEditFreq:o}){let[s,c]=(0,l.useState)(``),[u,d]=(0,l.useState)(null),[tm,setTm]=(0,l.useState)(``),[ld,setLd]=(0,l.useState)(``),[f,p]=(0,l.useState)(!1),m=(0,l.useRef)(null);window.__taskSetMemoDate=function(v){d(v)};let h=()=>{let e=s.trim();e&&(n(e,u,!1,tm,ld===``?null:Number(ld)),c(``),d(null),setTm(``),setLd(``)),m.current?.focus()}""",
     )
     text = replaceOne(
         text,
         """onClick:()=>{n(e.text,u,!0),d(null)}""",
-        """onClick:()=>{n(e.text,u,!0,tm),d(null),setTm(``)}""",
+        """onClick:()=>{n(e.text,u,!0,tm,ld===``?null:Number(ld)),d(null),setTm(``),setLd(``)}""",
     )
     text = replaceOne(
         text,
         """(0,A.jsx)(`div`,{className:`mt-2`,children:(0,A.jsx)(Yt,{value:u,onChange:d,today:t,name:`add`})}),""",
-        """(0,A.jsx)(`div`,{className:`mt-2`,children:(0,A.jsx)(Yt,{value:u,onChange:d,today:t,name:`add`})}),(0,A.jsxs)(`label`,{className:`mt-2 flex items-center gap-2 text-sm text-muted`,children:[`時刻`,(0,A.jsx)(`input`,{type:`time`,step:`60`,"aria-label":`時刻（なくても可）`,"data-memo-time":!0,className:`${'$'}{N} w-32`,value:tm,onChange:e=>setTm(e.target.value)}),`空なら鳴りません`]}),""",
+        """(0,A.jsx)(`div`,{className:`mt-2`,children:(0,A.jsx)(Yt,{value:u,onChange:d,today:t,name:`add`})}),(0,A.jsxs)(`label`,{className:`mt-2 flex items-center gap-2 text-sm text-muted`,children:[`時刻`,(0,A.jsx)(`input`,{type:`time`,step:`60`,"aria-label":`時刻（なくても可）`,"data-memo-time":!0,className:`${'$'}{N} w-32`,value:tm,onChange:e=>setTm(e.target.value)}),`空なら鳴りません`]}),(0,A.jsxs)(`label`,{className:`mt-2 flex items-center gap-2 text-sm text-muted`,children:[`前の通知`,(0,A.jsxs)(`select`,{"aria-label":`前の通知`,"data-memo-lead":!0,className:`${'$'}{N} w-36`,value:ld,onChange:e=>setLd(e.target.value),children:[(0,A.jsx)(`option`,{value:``,children:`控えと同じ`}),(0,A.jsx)(`option`,{value:`0`,children:`なし`}),(0,A.jsx)(`option`,{value:`5`,children:`5分前`}),(0,A.jsx)(`option`,{value:`10`,children:`10分前`}),(0,A.jsx)(`option`,{value:`15`,children:`15分前`}),(0,A.jsx)(`option`,{value:`30`,children:`30分前`}),(0,A.jsx)(`option`,{value:`60`,children:`1時間前`})]})]}),""",
     )
     text = replaceOne(
         text,
         """function Qt({memo:e,today:t,onSave:n,onDelete:r,onClose:i}){let[a,o]=(0,l.useState)(e.text),[s,c]=(0,l.useState)(e.due),u=()=>{let t=a.trim();t?n({...e,text:t,due:s}):alert(`内容を入れてください`)};""",
-        """function Qt({memo:e,today:t,onSave:n,onDelete:r,onClose:i}){let[a,o]=(0,l.useState)(e.text),[s,c]=(0,l.useState)(e.due),[tm,setTm]=(0,l.useState)(e.time||``),u=()=>{let t=a.trim();t?n({...e,text:t,due:s,time:/^\d{2}:\d{2}$/.test(tm)?tm:null}):alert(`内容を入れてください`)};""",
+        """function Qt({memo:e,today:t,onSave:n,onDelete:r,onClose:i}){let[a,o]=(0,l.useState)(e.text),[s,c]=(0,l.useState)(e.due),[tm,setTm]=(0,l.useState)(e.time||``),[ld,setLd]=(0,l.useState)(e.lead==null?``:String(e.lead)),u=()=>{let t=a.trim();t?n({...e,text:t,due:s,time:/^\d{2}:\d{2}$/.test(tm)?tm:null,lead:[0,5,10,15,30,60].includes(Number(ld))?Number(ld):null}):alert(`内容を入れてください`)};""",
     )
     text = replaceOne(
         text,
         """(0,A.jsxs)(`div`,{className:`mb-4`,children:[(0,A.jsx)(`span`,{className:`mb-1 block text-sm text-muted`,children:`日付`}),(0,A.jsx)(Yt,{value:s,onChange:c,today:t,name:`edit`})]}),""",
-        """(0,A.jsxs)(`div`,{className:`mb-4`,children:[(0,A.jsx)(`span`,{className:`mb-1 block text-sm text-muted`,children:`日付`}),(0,A.jsx)(Yt,{value:s,onChange:c,today:t,name:`edit`})]}),(0,A.jsxs)(`label`,{className:`mb-4 flex items-center gap-2 text-sm text-muted`,children:[`時刻`,(0,A.jsx)(`input`,{type:`time`,step:`60`,"aria-label":`時刻（なくても可）`,"data-memo-time":!0,className:`${'$'}{N} w-32`,value:tm,onChange:e=>setTm(e.target.value)})]}),""",
+        """(0,A.jsxs)(`div`,{className:`mb-4`,children:[(0,A.jsx)(`span`,{className:`mb-1 block text-sm text-muted`,children:`日付`}),(0,A.jsx)(Yt,{value:s,onChange:c,today:t,name:`edit`})]}),(0,A.jsxs)(`label`,{className:`mb-4 flex items-center gap-2 text-sm text-muted`,children:[`時刻`,(0,A.jsx)(`input`,{type:`time`,step:`60`,"aria-label":`時刻（なくても可）`,"data-memo-time":!0,className:`${'$'}{N} w-32`,value:tm,onChange:e=>setTm(e.target.value)})]}),(0,A.jsxs)(`label`,{className:`mb-4 flex items-center gap-2 text-sm text-muted`,children:[`前の通知`,(0,A.jsxs)(`select`,{"aria-label":`前の通知`,"data-memo-lead":!0,className:`${'$'}{N} w-36`,value:ld,onChange:e=>setLd(e.target.value),children:[(0,A.jsx)(`option`,{value:``,children:`控えと同じ`}),(0,A.jsx)(`option`,{value:`0`,children:`なし`}),(0,A.jsx)(`option`,{value:`5`,children:`5分前`}),(0,A.jsx)(`option`,{value:`10`,children:`10分前`}),(0,A.jsx)(`option`,{value:`15`,children:`15分前`}),(0,A.jsx)(`option`,{value:`30`,children:`30分前`}),(0,A.jsx)(`option`,{value:`60`,children:`1時間前`})]})]}),""",
     )
     text = replaceOne(
         text,
@@ -153,7 +156,7 @@ fun patchIndex(html: String): String {
     text = replaceOne(
         text,
         """(0,l.useEffect)(()=>{try{localStorage.setItem(Ze,JSON.stringify(n))}catch{}},[n])""",
-        """(0,l.useEffect)(()=>{try{localStorage.setItem(Ze,JSON.stringify(n))}catch(e){}try{window.__taskGet=function(){return n};window.__taskSet=r;window.__taskSetTab=a;window.__taskOpen=v;window.__taskShift=function(kind,id,tabId,date){let s=/^\d{4}-\d{2}-\d{2}$/.test(date)?date:null;if(kind===`c`||kind===`clean`)ce(id,{shift:s});else if(kind===`b`||kind===`bousai`)ue(id,{shift:s});else if(tabId)me(tabId,id,{shift:s})};window.__taskSetRing=function(id,on){r(function(s){let rings=Object.assign({memo:!0},s.rings||{});rings[id]=!!on;return Object.assign({},s,{rings:rings})})};window.__taskAddMemo=function(text,due,time){let body=String(text||``).trim();if(!body)return!1;let day=/^\d{4}-\d{2}-\d{2}$/.test(String(due||``))?due:null;let clock=/^\d{2}:\d{2}$/.test(String(time||``))?time:``;try{a(`memo`)}catch(err){}D(body,day,!1,clock);return!0}}catch(e){}try{window.TaskNative&&window.TaskNative.onState(JSON.stringify(n))}catch(e){}try{window.__taskOnData&&window.__taskOnData(n)}catch(e){}},[n])""",
+        """(0,l.useEffect)(()=>{try{localStorage.setItem(Ze,JSON.stringify(n))}catch(e){}try{window.__taskGet=function(){return n};window.__taskSet=r;window.__taskSetTab=a;window.__taskOpen=v;window.__taskShift=function(kind,id,tabId,date){let s=/^\d{4}-\d{2}-\d{2}$/.test(date)?date:null;if(kind===`c`||kind===`clean`)ce(id,{shift:s});else if(kind===`b`||kind===`bousai`)ue(id,{shift:s});else if(tabId)me(tabId,id,{shift:s})};window.__taskSetRing=function(id,on){r(function(s){let rings=Object.assign({memo:!0},s.rings||{});rings[id]=!!on;return Object.assign({},s,{rings:rings})})};window.__taskAddMemo=function(text,due,time){let body=String(text||``).trim();if(!body)return!1;let day=/^\d{4}-\d{2}-\d{2}$/.test(String(due||``))?due:null;let clock=/^\d{2}:\d{2}$/.test(String(time||``))?time:``;try{a(`memo`)}catch(err){}D(body,day,!1,clock,null);return!0};window.__taskMarkDone=function(raw){let e=typeof raw==`string`?JSON.parse(raw):raw;if(!e||!e.id)return!1;let today=et(),ok=!1;if(e.kind===`memo`){Se(n=>n.map(m=>m.id===e.id?{...m,done:m.done||today}:m));ok=!0}else if(e.kind===`clean`){ce(e.id,{done:today,shift:null});ok=!0}else if(e.kind===`bousai`){ue(e.id,{due:null,shift:null});ok=!0}else if(e.tabId){me(e.tabId,e.id,{done:today,shift:null});ok=!0}if(ok){try{window.TaskNative&&TaskNative.ackDone(e.kind,e.id)}catch(err){}}return ok};window.__taskSetLead=function(min){let n=Number(min);r(function(s){return Object.assign({},s,{leadMinutes:[0,5,10,15,30,60].includes(n)?n:10})})};window.__taskSetNextNotice=function(on){r(function(s){return Object.assign({},s,{nextTaskNotice:!!on})})}}catch(e){}try{window.TaskNative&&window.TaskNative.onState(JSON.stringify(n))}catch(e){}try{window.__taskOnData&&window.__taskOnData(n)}catch(e){}},[n])""",
     )
     text = replaceOne(
         text,
@@ -163,7 +166,7 @@ fun patchIndex(html: String): String {
     text = replaceOne(
         text,
         """let g={version:2,cleaning:u,bousai:d,tabs:s,memos:f,frequent:m};return o.length&&(g.removed=[...new Set(o)]),g}""",
-        """let g={version:2,cleaning:u,bousai:d,tabs:s,memos:f,frequent:m};g.rings=e.rings&&typeof e.rings==`object`?{memo:!0,...e.rings}:{memo:!0};return o.length&&(g.removed=[...new Set(o)]),g}""",
+        """let g={version:2,cleaning:u,bousai:d,tabs:s,memos:f,frequent:m};g.rings=e.rings&&typeof e.rings==`object`?{memo:!0,...e.rings}:{memo:!0};g.leadMinutes=[0,5,10,15,30,60].includes(e.leadMinutes)?e.leadMinutes:10;g.nextTaskNotice=e.nextTaskNotice!==!1;return o.length&&(g.removed=[...new Set(o)]),g}""",
     )
     text = replaceOne(
         text,
@@ -233,7 +236,7 @@ fun patchIndex(html: String): String {
     text = replaceOne(
         text,
         """i===`settings`&&(0,A.jsxs)(`div`,{className:`space-y-3`,children:[(0,A.jsxs)(`div`,{className:`rounded-xl border border-line bg-card p-4`,children:""",
-        """i===`settings`&&(0,A.jsxs)(`div`,{className:`space-y-3`,children:[(0,A.jsx)(`div`,{id:`task-summary-host`,className:`mb-3`}),(0,A.jsx)(`div`,{id:`task-ring-host`,className:`mb-3`}),(0,A.jsx)(`div`,{id:`task-voice-host`,className:`mb-3`}),(0,A.jsxs)(`div`,{className:`rounded-xl border border-line bg-card p-4`,children:""",
+        """i===`settings`&&(0,A.jsxs)(`div`,{className:`space-y-3`,children:[(0,A.jsx)(`div`,{id:`task-summary-host`,className:`mb-3`}),(0,A.jsx)(`div`,{id:`task-ring-host`,className:`mb-3`}),(0,A.jsx)(`div`,{id:`task-voice-host`,className:`mb-3`}),(0,A.jsx)(`div`,{id:`task-ahead-host`,className:`mb-3`}),(0,A.jsxs)(`div`,{className:`rounded-xl border border-line bg-card p-4`,children:""",
     )
     text = replaceOne(
         text,

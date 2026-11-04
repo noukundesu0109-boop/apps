@@ -53,6 +53,12 @@
     "#task-voice-host p{margin:8px 0 0;color:#6f675c;font-size:14px;line-height:1.5}",
     "#task-voice-host label{display:flex;align-items:center;gap:8px;font-size:15px}",
     "#task-voice-host input{width:18px;height:18px}",
+    "#task-ahead-host .ts-card{background:#fffdf8;border:1px solid #e4ddd0;border-radius:12px;padding:16px;color:#1c1917}",
+    "#task-ahead-host h2{margin:0 0 4px;font-size:16px}",
+    "#task-ahead-host p{margin:8px 0 0;color:#6f675c;font-size:14px;line-height:1.5}",
+    "#task-ahead-host label{display:flex;align-items:center;gap:8px;font-size:15px;margin:8px 0}",
+    "#task-ahead-host select{font-size:16px;padding:6px 8px;border:1px solid #e4ddd0;border-radius:8px;background:#fffdf8;color:#1c1917}",
+    "#task-ahead-host input{width:18px;height:18px}",
     "#task-voice-sheet{position:fixed;inset:0;z-index:80;background:rgba(28,25,23,.45);display:flex;align-items:flex-end;justify-content:center}",
     "#task-voice-sheet .box{width:min(420px,100%);background:#fffdf8;color:#1c1917;border-radius:16px 16px 0 0;padding:16px 16px 28px;box-sizing:border-box}",
     "#task-voice-sheet h2{margin:0 0 8px;font-size:18px}",
@@ -541,6 +547,39 @@
     }
     showVoiceConfirm(data);
   };
+  function renderAhead() {
+    var host = document.getElementById("task-ahead-host");
+    if (!host) return;
+    var data = typeof window.__taskGet === "function" ? window.__taskGet() : null;
+    var choices = [0, 5, 10, 15, 30, 60];
+    var lead = data && choices.indexOf(data.leadMinutes) >= 0 ? String(data.leadMinutes) : "10";
+    var on = !data || data.nextTaskNotice !== false;
+    var sig = lead + "|" + (on ? "1" : "0");
+    if (host.getAttribute("data-sig") === sig && host.querySelector("[data-ahead]")) return;
+    host.setAttribute("data-sig", sig);
+    var labels = { "0": "なし", "5": "5分前", "10": "10分前", "15": "15分前", "30": "30分前", "60": "1時間前" };
+    var options = choices.map(function (n) {
+      var value = String(n);
+      return '<option value="' + value + '"' + (value === lead ? " selected" : "") + ">" + labels[value] + "</option>";
+    }).join("");
+    host.innerHTML =
+      '<div class="ts-card" data-ahead="1">' +
+      "<h2>次のタスク</h2>" +
+      '<label><input type="checkbox" id="task-next-notice"' + (on ? " checked" : "") + "><span>次のタスクを通知に出す</span></label>" +
+      "<p>オンにすると、今日の次の予定を通知に出し続けます。音は鳴らしません。最初はオンです。</p>" +
+      '<label>前もって知らせる<select id="task-lead-default" aria-label="前もって知らせる">' + options + "</select></label>" +
+      "<p>時刻の前にも知らせます。メモごとに変えることもできます。最初は10分前です。</p>" +
+      "</div>";
+    var box = host.querySelector("#task-next-notice");
+    var select = host.querySelector("#task-lead-default");
+    if (box) box.addEventListener("change", function () {
+      if (window.__taskSetNextNotice) window.__taskSetNextNotice(box.checked);
+    });
+    if (select) select.addEventListener("change", function () {
+      if (window.__taskSetLead) window.__taskSetLead(select.value);
+    });
+  }
+
   function renderVoiceSetting() {
     var host = document.getElementById("task-voice-host");
     if (!host || host.querySelector("[data-voice-setting]")) return;
@@ -595,6 +634,7 @@
     renderSummary();
     renderRings();
     renderVoiceSetting();
+    renderAhead();
   };
 
   var appRoot = document.getElementById("root");
@@ -606,6 +646,7 @@
       var ringHost = document.getElementById("task-ring-host");
       if (ringHost && !ringHost.querySelector("[data-rings]")) renderRings();
       renderVoiceSetting();
+      renderAhead();
     }).observe(appRoot, { childList: true, subtree: true });
   }
 })();

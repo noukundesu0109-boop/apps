@@ -11,8 +11,10 @@ import androidx.core.app.NotificationCompat
 import dev.nossam.task.plan.MemoPlanner
 import dev.nossam.task.plan.PlannedMemoAlarm
 import dev.nossam.task.plan.TaskBoard
+import dev.nossam.task.plan.completeOccurrence
 import dev.nossam.task.plan.parseBoard
 import dev.nossam.task.plan.plannedMemosToJson
+import org.json.JSONObject
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.util.UUID
@@ -22,10 +24,16 @@ internal object UiBridge {
     var scheduleSink: ((String) -> Unit)? = null
     var permissionSink: ((String) -> Unit)? = null
     var lastSchedule: String? = null
+    var doneSink: ((String) -> Unit)? = null
 
     fun publishSchedule(json: String) {
         lastSchedule = json
         val sink = scheduleSink ?: return
+        android.os.Handler(android.os.Looper.getMainLooper()).post { sink(json) }
+    }
+
+    fun publishDone(json: String) {
+        val sink = doneSink ?: return
         android.os.Handler(android.os.Looper.getMainLooper()).post { sink(json) }
     }
 }
@@ -88,6 +96,57 @@ internal object TaskAlarms {
             rebuild(app)
         }
         UiBridge.publishSchedule(schedule)
+    }
+
+    fun complete(context: Context, kind: String, itemId: String, tabId: String) {
+        if (itemId.isBlank() || kind.isBlank()) return
+        val app = context.applicationContext
+        val schedule = synchronized(lock) {
+            val store = AlarmStore(app)
+            val json = store.readWork()
+            if (json != null) {
+                val today = ZonedDateTime.now(MemoPlanner.ZONE).toLocalDate().toString()
+                store.writeWork(completeOccurrence(json, kind, itemId, tabId, today))
+                store.addPendingDone(StoredDone(kind, itemId, tabId))
+            }
+            rebuild(app)
+        }
+        UiBridge.publishSchedule(schedule)
+        UiBridge.publishDone(JSONObject().put("kind", kind).put("id", itemId).put("tabId", tabId).toString())
+    }
+
+    fun acknowledgeDone(context: Context, kind: String, itemId: String) {
+        if (itemId.length > 200 || kind.length > 20) return
+        AlarmStore(context.applicationContext).removePendingDone(kind, itemId)
+    }
+
+    fun showLead(context: Context, title: String, time: String, minutes: Int) {
+        val app = context.applicationContext
+        if (!PermissionGate.notificationsOk(app)) return
+        ensureAheadChannel(app)
+        val open = PendingIntent.getActivity(
+            app,
+            11,
+            Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val whenLabel = MemoPlanner.leadLabel(minutes)
+        val body = "$whenLabel $time $title".trim()
+        val notification = NotificationCompat.Builder(app, AlarmIntents.LEAD_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_alarm)
+            .setContentTitle(app.getString(R.string.ahead_title))
+            .setContentText(body)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .build()
+        try {
+            app.getSystemService(NotificationManager::class.java)?.notify(AlarmIntents.LEAD_NOTIFICATION_ID, notification)
+        } catch (error: SecurityException) {
+            Log.w(TAG, "advance notice was rejected", error)
+        }
     }
 
     fun showSummary(context: Context, dateIso: String?) {
@@ -162,18 +221,23 @@ internal object TaskAlarms {
         val manager = context.getSystemService(AlarmManager::class.java)
         val previous = store.readCodes()
         if (manager != null) cancelAll(context, manager, previous)
+        val leads = MemoPlanner.planLead(board, now)
         val summaryAt = MemoPlanner.nextSummaryAt(now, store.readSummaryTime())
-        val ids = planned.map { it.id } + listOf("maintenance", "summary")
+        val ids = planned.map { it.id } + leads.map { it.id } + listOf("maintenance", "summary")
         val codes = assignCodes(ids, previous)
         val exact = manager != null && canExact(context)
         if (manager != null) {
             for (alarm in planned) {
                 scheduleFire(context, manager, codes.getValue(alarm.id), alarm, exact)
             }
+            for (lead in leads) {
+                scheduleLead(context, manager, codes.getValue(lead.id), lead, exact)
+            }
             scheduleMaintenance(context, manager, codes.getValue("maintenance"), maintenanceAt(now), exact)
             scheduleSummary(context, manager, codes.getValue("summary"), summaryAt, exact)
         }
         store.writeCodes(codes)
+        NextTaskNotice.update(context, if (board.nextTaskNotice) MemoPlanner.nextToday(board, now) else null)
         Log.i(TAG, "scheduled ${planned.size} alarms exact=$exact summary=${summaryAt.toLocalTime()}")
         return plannedMemosToJson(planned)
     }
@@ -208,9 +272,10 @@ internal object TaskAlarms {
 
     private fun cancelAll(context: Context, manager: AlarmManager, codes: Map<String, Int>) {
         for ((id, code) in codes) {
-            val action = when (id) {
-                "maintenance" -> AlarmIntents.ACTION_MAINT
-                "summary" -> AlarmIntents.ACTION_SUMMARY
+            val action = when {
+                id == "maintenance" -> AlarmIntents.ACTION_MAINT
+                id == "summary" -> AlarmIntents.ACTION_SUMMARY
+                id.startsWith("p|") -> AlarmIntents.ACTION_LEAD
                 else -> AlarmIntents.ACTION_FIRE
             }
             manager.cancel(pendingBroadcast(context, action, code))
@@ -275,6 +340,40 @@ internal object TaskAlarms {
         } catch (error: SecurityException) {
             Log.w(TAG, "maintenance alarm was rejected", error)
             manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, operation)
+        }
+    }
+
+    private fun scheduleLead(
+        context: Context,
+        manager: AlarmManager,
+        requestCode: Int,
+        alarm: PlannedMemoAlarm,
+        exact: Boolean,
+    ) {
+        val intent = Intent(context, AlarmReceiver::class.java).setAction(AlarmIntents.ACTION_LEAD).apply {
+            putExtra(AlarmIntents.EXTRA_TITLE, alarm.title)
+            putExtra(AlarmIntents.EXTRA_ID, alarm.time)
+            putExtra(AlarmIntents.EXTRA_LEAD, alarm.leadMinutes)
+        }
+        val operation = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        try {
+            if (exact) {
+                manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.triggerAtMillis, operation)
+            } else {
+                manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.triggerAtMillis, operation)
+            }
+        } catch (error: SecurityException) {
+            Log.w(TAG, "advance alarm was rejected", error)
+            try {
+                manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.triggerAtMillis, operation)
+            } catch (fallback: Exception) {
+                Log.e(TAG, "could not schedule ${alarm.id}", fallback)
+            }
         }
     }
 

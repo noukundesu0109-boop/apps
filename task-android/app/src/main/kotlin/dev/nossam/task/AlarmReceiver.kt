@@ -20,7 +20,20 @@ internal class AlarmReceiver : BroadcastReceiver() {
                 if (action == AlarmIntents.ACTION_SUMMARY) {
                     TaskAlarms.showSummary(app, date)
                 }
-                TaskAlarms.reschedule(app)
+                if (action == AlarmIntents.ACTION_LEAD) {
+                    val minutes = intent.getIntExtra(AlarmIntents.EXTRA_LEAD, 0)
+                    val whenText = intent.getStringExtra(AlarmIntents.EXTRA_ID).orEmpty()
+                    TaskAlarms.showLead(app, title.orEmpty(), whenText, minutes)
+                }
+                if (action == AlarmIntents.ACTION_DONE) {
+                    TaskAlarms.complete(
+                        app,
+                        intent.getStringExtra(AlarmIntents.EXTRA_KIND).orEmpty(),
+                        intent.getStringExtra(AlarmIntents.EXTRA_ITEM).orEmpty(),
+                        intent.getStringExtra(AlarmIntents.EXTRA_TAB).orEmpty(),
+                    )
+                }
+                if (action != AlarmIntents.ACTION_DONE) TaskAlarms.reschedule(app)
                 if (action == AlarmIntents.ACTION_FIRE) {
                     val service = Intent(app, AlarmRingService::class.java).setAction(AlarmIntents.ACTION_FIRE).apply {
                         putExtra(AlarmIntents.EXTRA_TITLE, title)
