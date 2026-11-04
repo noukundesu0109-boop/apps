@@ -7,6 +7,12 @@
   var style = document.createElement("style");
   style.textContent = [
     "#task-cal-host{color:#1c1917}",
+    "#task-restore-ask{position:fixed;z-index:60;left:0;right:0;top:0;bottom:0;background:rgba(28,25,23,.45);display:flex;align-items:center;justify-content:center;padding:24px}",
+    "#task-restore-ask .za-ask-card{background:#fffdf8;color:#1c1917;border-radius:16px;padding:18px 16px;max-width:320px;width:100%}",
+    "#task-restore-ask p{margin:0 0 10px;font-size:15px;line-height:1.5}",
+    "#task-restore-ask .za-ask-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}",
+    "#task-restore-ask button{border:1px solid #e4ddd0;background:#fff;border-radius:999px;padding:8px 14px;font-size:15px;font-weight:700;color:#1c1917}",
+    "#task-restore-ask button[data-ask=yes]{background:#1f5c45;color:#fffdf8;border-color:#1f5c45}",
     ".tc-card{background:#fffdf8;border:1px solid #e4ddd0;border-radius:12px;padding:12px}",
     ".tc-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px}",
     ".tc-head h2{margin:0;font-size:18px}",
@@ -642,6 +648,26 @@
     renderRings();
     renderVoiceSetting();
     renderAhead();
+  };
+
+  window.__taskAskRestore = function (when, onYes) {
+    var old = document.getElementById("task-restore-ask");
+    if (old) old.remove();
+    var host = document.createElement("div");
+    host.id = "task-restore-ask";
+    host.innerHTML =
+      '<div class="za-ask-card" role="dialog" aria-modal="true">' +
+      "<p>" + String(when || "日時不明") + " に保存したバックアップです。</p>" +
+      "<p><b>今のデータをこのバックアップで置きかえます。よろしいですか？</b></p>" +
+      '<div class="za-ask-actions"><button type="button" data-ask="no">やめる</button><button type="button" data-ask="yes">戻す</button></div></div>';
+    document.body.appendChild(host);
+    host.addEventListener("click", function (event) {
+      var button = event.target.closest && event.target.closest("button");
+      if (!button) return;
+      var yes = button.getAttribute("data-ask") === "yes";
+      host.remove();
+      if (yes && onYes) onYes();
+    });
   };
 
   var appRoot = document.getElementById("root");

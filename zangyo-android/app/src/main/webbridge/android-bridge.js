@@ -100,6 +100,12 @@
     "#za-year-count .za-work{background:#1f5c45;color:#fffdf8}",
     "#za-year-count .za-off{background:#fff;color:#b42318;border:1px solid #e4ddd0}",
     "#za-year-count .za-leave{background:#c5e88a;color:#4d7c0f}",
+    "#za-restore-ask{position:fixed;z-index:60;left:0;right:0;top:0;bottom:0;background:rgba(28,25,23,.45);display:flex;align-items:center;justify-content:center;padding:24px}",
+    "#za-restore-ask .za-ask-card{background:#fffdf8;color:#1c1917;border-radius:16px;padding:18px 16px;max-width:320px;width:100%}",
+    "#za-restore-ask p{margin:0 0 10px;font-size:15px;line-height:1.5}",
+    "#za-restore-ask .za-ask-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}",
+    "#za-restore-ask button{border:1px solid #e4ddd0;background:#fff;border-radius:999px;padding:8px 14px;font-size:15px;font-weight:700;color:#1c1917}",
+    "#za-restore-ask button[data-ask=yes]{background:#1f5c45;color:#fffdf8;border-color:#1f5c45}",
     ".za-ehours{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:6px 0}",
     ".za-eh{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;color:#6f675c}",
     ".za-eh input{width:100%;box-sizing:border-box;font-size:14px;padding:6px 2px;text-align:center;border:1px solid #e4ddd0;border-radius:8px;background:#fff;color:#1c1917}",
@@ -181,6 +187,26 @@
       return true;
     }
     return false;
+  };
+
+  window.__zangyoAskRestore = function (when, onYes) {
+    var old = document.getElementById("za-restore-ask");
+    if (old) old.remove();
+    var host = document.createElement("div");
+    host.id = "za-restore-ask";
+    host.innerHTML =
+      '<div class="za-ask-card" role="dialog" aria-modal="true">' +
+      "<p>" + esc(when) + " に保存したバックアップです。</p>" +
+      "<p><b>今のデータをこのバックアップで置きかえます。よろしいですか？</b></p>" +
+      '<div class="za-ask-actions"><button type="button" data-ask="no">やめる</button><button type="button" data-ask="yes">戻す</button></div></div>';
+    document.body.appendChild(host);
+    host.addEventListener("click", function (event) {
+      var button = event.target.closest && event.target.closest("button");
+      if (!button) return;
+      var yes = button.getAttribute("data-ask") === "yes";
+      host.remove();
+      if (yes && onYes) onYes();
+    });
   };
 
   function esc(value) {

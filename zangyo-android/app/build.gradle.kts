@@ -13,8 +13,8 @@ android {
         applicationId = "dev.nossam.zangyo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "1.1.2"
+        versionCode = 14
+        versionName = "1.1.3"
     }
 
     buildTypes {
@@ -79,6 +79,8 @@ val prepareWeb = tasks.register("prepareZangyoWeb") {
         check(index.contains("earlyWeekdays:ew")) { "early weekday setting was not kept" }
         check(index.contains("enabled:e.enabled===!1")) { "alarm on/off was not kept" }
         check(index.contains("__zangyoDriveDone")) { "drive save was not switched to Android sign-in" }
+        check(index.contains("ドライブから戻す")) { "drive restore button was not injected" }
+        check(index.contains("__zangyoApplyBackup")) { "drive restore was not wired to the file restore" }
         check(index.contains("za-year-count")) { "year day count was not injected" }
         check(index.contains("za-early-hours")) { "per-day early hours field was not injected" }
         check(index.contains("earlyHoursWeekday:eh")) { "weekday early hours were not kept in backups" }
@@ -124,6 +126,16 @@ fun patchIndex(html: String): String {
         text,
         "最新2件を残し、古いものはゴミ箱へ",
         "新しい1件だけを残し、前のファイルはゴミ箱へ",
+    )
+    text = replaceOne(
+        text,
+        """be=async e=>{if(e)try{let t=JSON.parse(await e.text());if(!rt(t)){p(`このファイルは就業（残業）のバックアップではありません。`);return}let n=ot(t);if(!confirm(`${'$'}{Object.keys(t.days).length}日分の記録で上書きします。`+(n?`勤務カレンダーも${'$'}{Object.keys(at(t.shifts)).length}日分で上書きします。`:`勤務カレンダーは入っていないので、今のままにします。`)+`よろしいですか？`))return;r(e=>mt({version:1,days:t.days,adjust:t.adjust,leave:t.leave,leaveCfg:t.leaveCfg,shifts:n?t.shifts:e.shifts,early:Array.isArray(t.early)?t.early:e.early,alarms:t.alarms&&typeof t.alarms==`object`?t.alarms:e.alarms})),p(n?`復元しました`:`復元しました（勤務カレンダーは今のまま）`)}catch{p(`このファイルは読み取れませんでした。就業（残業）のバックアップ（JSON）を選んでください。`)}}""",
+        """__zangyoApplyBackup=(window.__zangyoApplyBackup=function(text,ask){try{let t=JSON.parse(text);if(!rt(t)){p(ask?`このファイルは就業（残業）のバックアップではありません。`:`このバックアップは読み取れません。このアプリのファイルか確認してください。`);return!1}let n=ot(t);if(ask){let days=Object.keys(t.days).length,note=n?`勤務カレンダーも`+Object.keys(at(t.shifts)).length+`日分で上書きします。`:`勤務カレンダーは入っていないので、今のままにします。`;if(!confirm(days+`日分の記録で上書きします。`+note+`よろしいですか？`))return!1}r(e=>mt({version:1,days:t.days,adjust:t.adjust,leave:t.leave,leaveCfg:t.leaveCfg,shifts:n?t.shifts:e.shifts,early:Array.isArray(t.early)?t.early:e.early,alarms:t.alarms&&typeof t.alarms==`object`?t.alarms:e.alarms,dayAlarms:t.dayAlarms,earlyWeekdays:t.earlyWeekdays,earlySkip:t.earlySkip,earlyHoursWeekday:t.earlyHoursWeekday,earlyHoursDay:t.earlyHoursDay})),p(ask?(n?`復元しました`:`復元しました（勤務カレンダーは今のまま）`):`復元しました`);return!0}catch(err){p(ask?`このファイルは読み取れませんでした。就業（残業）のバックアップ（JSON）を選んでください。`:`このバックアップは読み取れません。このアプリのファイルか確認してください。`);return!1}}),__zangyoDriveRestore=(window.__zangyoDriveRestore=function(raw){ge(!1);let e=null;try{e=typeof raw==`string`?JSON.parse(raw):raw}catch(err){p(`このバックアップは読み取れません。このアプリのファイルか確認してください。`);return}if(!e||e.ok===!1){p(e&&e.message||`Googleドライブから戻せませんでした。通信状態やGoogleの許可を確認して、もう一度試してください。`);return}if(e.phase===`preview`){let when=e.when||`日時不明`;p(when+` に保存したバックアップです。`);if(window.__zangyoAskRestore)window.__zangyoAskRestore(when,function(){ge(!0);p(`バックアップを戻しています…`);try{ZangyoNative.restoreFromDrive(`download`)}catch(err){ge(!1);p(`Googleドライブから戻せませんでした。通信状態やGoogleの許可を確認して、もう一度試してください。`)}});return}if(e.phase===`content`&&window.__zangyoApplyBackup)window.__zangyoApplyBackup(e.content,!1)}),be=async e=>{if(e)try{window.__zangyoApplyBackup(await e.text(),!0)}catch(err){p(`このファイルは読み取れませんでした。就業（残業）のバックアップ（JSON）を選んでください。`)}}""",
+    )
+    text = replaceOne(
+        text,
+        """onChange:e=>{be(e.target.files[0]),e.target.value=``}})]})]})]}),""",
+        """onChange:e=>{be(e.target.files[0]),e.target.value=``}})]}),(0,A.jsx)(_t,{variant:`outline`,onClick:()=>{if(window.ZangyoNative&&ZangyoNative.restoreFromDrive){ge(!0);p(`Googleドライブを確認しています…`);try{ZangyoNative.restoreFromDrive(`preview`)}catch(err){ge(!1);p(`Googleドライブから戻せませんでした。通信状態やGoogleの許可を確認して、もう一度試してください。`)}}},children:`ドライブから戻す`})]})]}),""",
     )
     text = replaceOne(
         text,

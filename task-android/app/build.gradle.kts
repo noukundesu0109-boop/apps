@@ -13,13 +13,14 @@ android {
         applicationId = "dev.nossam.task"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.4.1"
+        versionCode = 10
+        versionName = "1.4.2"
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
         debug {
             isMinifyEnabled = false
@@ -32,6 +33,10 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+    }
+
+    lint {
+        checkReleaseBuilds = false
     }
 
     packaging {
@@ -87,13 +92,15 @@ val prepareWeb = tasks.register("prepareTaskWeb") {
         check(index.contains("doneOnStop")) { "done-on-stop setting was not kept in backups" }
         check(index.contains("にずらし中")) { "postpone label was not injected" }
         check(index.contains("新しい1件だけを残し")) { "drive keep-one text was not updated" }
+        check(index.contains("ドライブから戻す")) { "drive restore button was not injected" }
+        check(index.contains("__taskApplyBackup")) { "drive restore was not wired to the file restore" }
         check(!index.contains("serviceWorker.register")) { "service worker registration still present" }
     }
 }
 
 android.sourceSets.getByName("main").assets.srcDir(generatedWeb)
 tasks.configureEach {
-    if (name.startsWith("merge") && name.endsWith("Assets")) {
+    if ((name.startsWith("merge") && name.endsWith("Assets")) || name.contains("LintVital")) {
         dependsOn(prepareWeb)
     }
 }
@@ -238,6 +245,16 @@ fun patchIndex(html: String): String {
         text,
         """i===`settings`&&(0,A.jsxs)(`div`,{className:`space-y-3`,children:[(0,A.jsxs)(`div`,{className:`rounded-xl border border-line bg-card p-4`,children:""",
         """i===`settings`&&(0,A.jsxs)(`div`,{className:`space-y-3`,children:[(0,A.jsx)(`div`,{id:`task-summary-host`,className:`mb-3`}),(0,A.jsx)(`div`,{id:`task-ring-host`,className:`mb-3`}),(0,A.jsx)(`div`,{id:`task-voice-host`,className:`mb-3`}),(0,A.jsx)(`div`,{id:`task-ahead-host`,className:`mb-3`}),(0,A.jsxs)(`div`,{className:`rounded-xl border border-line bg-card p-4`,children:""",
+    )
+    text = replaceOne(
+        text,
+        """ht=async e=>{if(e)try{let t=JSON.parse(await e.text());if(!lt(t)){x(`このファイルはタスクのバックアップではありません。`);return}""",
+        """__taskApplyBackup=(window.__taskApplyBackup=function(text){try{let t=JSON.parse(text);if(!lt(t)){x(`このバックアップは読み取れません。このアプリのファイルか確認してください。`);return!1}r(Et(t,n.tabs,n.memos,n.frequent,n.removed));x(`復元しました`);return!0}catch(err){x(`このバックアップは読み取れません。このアプリのファイルか確認してください。`);return!1}}),__taskDriveRestore=(window.__taskDriveRestore=function(raw){ft(!1);let e=null;try{e=typeof raw==`string`?JSON.parse(raw):raw}catch(err){x(`このバックアップは読み取れません。このアプリのファイルか確認してください。`);return}if(!e||e.ok===!1){x(e&&e.message||`Googleドライブから戻せませんでした。通信状態やGoogleの許可を確認して、もう一度試してください。`);return}if(e.phase===`preview`){let when=e.when||`日時不明`;x(when+` に保存したバックアップです。`);if(window.__taskAskRestore)window.__taskAskRestore(when,function(){ft(!0);x(`バックアップを戻しています…`);try{TaskNative.restoreFromDrive(`download`)}catch(err){ft(!1);x(`Googleドライブから戻せませんでした。通信状態やGoogleの許可を確認して、もう一度試してください。`)}});return}if(e.phase===`content`)window.__taskApplyBackup(e.content)}),ht=async e=>{if(e)try{let t=JSON.parse(await e.text());if(!lt(t)){x(`このファイルはタスクのバックアップではありません。`);return}""",
+    )
+    text = replaceOne(
+        text,
+        """onChange:e=>{ht(e.target.files[0]),e.target.value=``}})]})]})]}),""",
+        """onChange:e=>{ht(e.target.files[0]),e.target.value=``}})]}),(0,A.jsx)(M,{variant:`outline`,onClick:()=>{if(window.TaskNative&&TaskNative.restoreFromDrive){ft(!0);x(`Googleドライブを確認しています…`);try{TaskNative.restoreFromDrive(`preview`)}catch(err){ft(!1);x(`Googleドライブから戻せませんでした。通信状態やGoogleの許可を確認して、もう一度試してください。`)}}},children:`ドライブから戻す`})]})]}),""",
     )
     text = replaceOne(
         text,

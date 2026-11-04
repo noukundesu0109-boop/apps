@@ -17,14 +17,24 @@ internal object DriveClient {
 
     fun save(token: String, name: String, content: String, namePrefix: Regex): JSONObject {
         val folder = grokFolder(token)
-        val uploaded = upload(token, folder, name, content)
-        val id = uploaded.optString("id")
+        val plan = DrivePlan.savePlan(listFiles(token, folder), namePrefix)
+        val updateId = plan.updateId
+        val uploaded = if (updateId == null) {
+            upload(token, folder, name, content)
+        } else {
+            replace(token, updateId, name, content)
+        }
+        val id = uploaded.optString("id").ifBlank { updateId.orEmpty() }
         val result = JSONObject()
             .put("ok", true)
             .put("name", uploaded.optString("name").ifBlank { name })
         if (id.isBlank()) return result.put("cleaned", 0).put("unverified", true)
         return try {
-            val trash = DrivePlan.idsToTrash(listFiles(token, folder), namePrefix, id)
+            val trash = try {
+                DrivePlan.idsToTrash(listFiles(token, folder), namePrefix, id)
+            } catch (_: Exception) {
+                plan.trashIds.filter { it != id }
+            }
             var cleaned = 0
             var failed = false
             for (old in trash) {
@@ -38,14 +48,36 @@ internal object DriveClient {
         }
     }
 
-    private fun grokFolder(token: String): String {
+    fun newestBackup(token: String, namePrefix: Regex): DriveFile? {
+        val folder = findGrokFolder(token) ?: return null
+        return DrivePlan.newest(listFiles(token, folder), namePrefix)
+    }
+
+    fun download(token: String, fileId: String): String {
+        if (fileId.isBlank() || fileId.length > 200) {
+            throw DriveFailure(dev.nossam.task.drive.DriveNotice("bad", DriveMessages.RESTORE_BAD))
+        }
+        return try {
+            call(token, "$FILES/${enc(fileId)}?alt=media", "GET", null, null, null, "*/*")
+        } catch (error: DriveFailure) {
+            if (error.notice.reason == "drive-api") throw error
+            throw DriveFailure(dev.nossam.task.drive.DriveNotice("error", DriveMessages.RESTORE_GENERIC))
+        }
+    }
+
+    private fun findGrokFolder(token: String): String? {
         val query = "name='Grok' and mimeType='application/vnd.google-apps.folder' and trashed=false"
         val listed = getJson(token, "$FILES?q=${enc(query)}&fields=files(id,name)&spaces=drive&pageSize=10")
-        val files = listed.optJSONArray("files")
-        if (files != null && files.length() > 0) {
-            val id = files.optJSONObject(0)?.optString("id").orEmpty()
+        val files = listed.optJSONArray("files") ?: return null
+        for (i in 0 until files.length()) {
+            val id = files.optJSONObject(i)?.optString("id").orEmpty()
             if (id.isNotBlank()) return id
         }
+        return null
+    }
+
+    private fun grokFolder(token: String): String {
+        findGrokFolder(token)?.let { return it }
         val created = postJson(
             token,
             FILES,
@@ -73,6 +105,20 @@ internal object DriveClient {
         return JSONObject(text.ifBlank { "{}" })
     }
 
+    private fun replace(token: String, fileId: String, name: String, content: String): JSONObject {
+        val boundary = "drive_${UUID.randomUUID()}"
+        val body = DrivePlan.replaceBody(name, content, boundary)
+        val text = call(
+            token,
+            "$UPLOAD/${enc(fileId)}?uploadType=multipart&fields=id,name",
+            "POST",
+            body,
+            DrivePlan.contentType(boundary),
+            "PATCH",
+        )
+        return JSONObject(text.ifBlank { "{}" })
+    }
+
     private fun listFiles(token: String, folderId: String): List<DriveFile> {
         val query = "'$folderId' in parents and trashed=false"
         val out = ArrayList<DriveFile>()
@@ -81,7 +127,7 @@ internal object DriveClient {
             val url = buildString {
                 append(FILES)
                 append("?q=").append(enc(query))
-                append("&orderBy=createdTime%20desc&fields=nextPageToken,files(id,name)&spaces=drive&pageSize=100")
+                append("&orderBy=modifiedTime%20desc&fields=nextPageToken,files(id,name,modifiedTime)&spaces=drive&pageSize=100")
                 if (!page.isNullOrBlank()) append("&pageToken=").append(enc(page!!))
             }
             val listed = getJson(token, url)
@@ -89,7 +135,11 @@ internal object DriveClient {
             if (files != null) {
                 for (i in 0 until files.length()) {
                     val item = files.optJSONObject(i) ?: continue
-                    out += DriveFile(id = item.optString("id"), name = item.optString("name"))
+                    out += DriveFile(
+                        id = item.optString("id"),
+                        name = item.optString("name"),
+                        modifiedTime = item.optString("modifiedTime"),
+                    )
                 }
             }
             page = listed.optString("nextPageToken").takeIf { it.isNotBlank() } ?: return out
@@ -127,13 +177,14 @@ internal object DriveClient {
         body: ByteArray?,
         contentType: String?,
         override: String?,
+        accept: String = "application/json",
     ): String {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 20_000
             readTimeout = 30_000
             setRequestProperty("Authorization", "Bearer $token")
-            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Accept", accept)
             if (override != null) setRequestProperty("X-HTTP-Method-Override", override)
             if (body != null) {
                 doOutput = true

@@ -61,4 +61,34 @@ class DrivePlanTest {
         assertTrue(body.trimEnd().endsWith("--bound--"))
         assertEquals("multipart/related; boundary=bound", DrivePlan.contentType("bound"))
     }
+
+    @Test
+    fun saveReplacesTheNewestBackupAndTrashesTheRest() {
+        val files = listOf(
+            DriveFile("old", "zangyo-backup-20261101.json", "2026-11-01T00:00:00.000Z"),
+            DriveFile("newer", "zangyo-backup-20261102.json", "2026-11-04T00:00:00.000Z"),
+            DriveFile("later-name", "zangyo-backup-20261110.json", "2026-11-01T00:00:00.000Z"),
+            DriveFile("tasks", "tasks-backup-20261104.json", "2026-11-05T00:00:00.000Z"),
+        )
+        val plan = DrivePlan.savePlan(files, prefix)
+        assertEquals("newer", plan.updateId)
+        assertEquals(listOf("old", "later-name"), plan.trashIds)
+        assertEquals(null, DrivePlan.savePlan(emptyList(), prefix).updateId)
+    }
+
+    @Test
+    fun savedTimeIsShownInJapanAndOnlyThisAppsBackupIsAccepted() {
+        assertEquals("2026年11月4日 19:21", DrivePlan.savedLabel("2026-11-04T10:21:00.000Z", "zangyo-backup-20261103.json"))
+        assertEquals("2026年11月5日 0:30", DrivePlan.savedLabel("2026-11-04T15:30:00Z"))
+        assertEquals("2026年11月3日", DrivePlan.savedLabel("", "zangyo-backup-20261103.json"))
+        assertEquals("日時不明", DrivePlan.savedLabel(null, "note.txt"))
+        assertTrue(DrivePlan.looksLikeBackup("""{"days":{},"adjust":{},"earlyHoursWeekday":{"1":0.5}}"""))
+        assertTrue(!DrivePlan.looksLikeBackup("""{"cleaning":[],"bousai":[]}"""))
+        assertTrue(!DrivePlan.looksLikeBackup("not json"))
+        assertEquals(DriveMessages.NONE, "このアプリでドライブに保存したバックアップがありません。先に「ドライブに保存」をしてください。")
+        assertEquals(DriveMessages.CONFIRM, "今のデータをこのバックアップで置きかえます。よろしいですか？")
+        assertEquals(DriveMessages.RESTORE_OFFLINE, DriveMessages.noticeForRestore(7).message)
+        assertEquals(DriveMessages.CANCEL, DriveMessages.noticeForRestore(12501).message)
+        assertEquals(DriveMessages.RESTORE_GENERIC, DriveMessages.noticeForRestore(500).message)
+    }
 }

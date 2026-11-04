@@ -34,6 +34,7 @@ import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import dev.nossam.zangyo.drive.DriveMessages
 import dev.nossam.zangyo.drive.DriveNotice
+import dev.nossam.zangyo.drive.DrivePlan
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
@@ -52,6 +53,8 @@ class MainActivity : AppCompatActivity(), ZangyoJsBridge.Ui {
     private var driveContent: String? = null
     private val driveBusy = AtomicBoolean(false)
     private val drivePrefix = Regex("^zangyo-backup-")
+    private var driveMode = "save"
+    private var driveRestoreId: String? = null
 
     private val driveConsent = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         onDriveConsent(result.resultCode, result.data)
@@ -253,6 +256,7 @@ class MainActivity : AppCompatActivity(), ZangyoJsBridge.Ui {
 
     override fun saveToDrive(name: String, content: String) {
         try {
+            driveMode = "save"
             if (name.isBlank() || name.length > 200 || content.length > 8_000_000) {
                 finishDrive(DriveNotice("error", DriveMessages.GENERIC))
                 return
@@ -264,6 +268,40 @@ class MainActivity : AppCompatActivity(), ZangyoJsBridge.Ui {
             if (!driveBusy.compareAndSet(false, true)) return
             driveName = name
             driveContent = content
+            startDriveAuth()
+        } catch (error: Throwable) {
+            android.util.Log.e(DRIVE_TAG, "drive save crashed", error)
+            finishDrive(DriveNotice("error", DriveMessages.GENERIC))
+        }
+    }
+
+    override fun restoreFromDrive(phase: String) {
+        try {
+            driveMode = if (phase == "download") "download" else "preview"
+            if (!driveOnline()) {
+                finishRestore(DriveNotice("offline", DriveMessages.RESTORE_OFFLINE))
+                return
+            }
+            if (driveMode == "download" && driveRestoreId.isNullOrBlank()) {
+                finishRestore(DriveNotice("none", DriveMessages.NONE))
+                return
+            }
+            if (!driveBusy.compareAndSet(false, true)) {
+                deliver(
+                    "window.__zangyoDriveRestore",
+                    JSONObject().put("ok", false).put("reason", "busy").put("message", DriveMessages.RESTORE_GENERIC).toString(),
+                )
+                return
+            }
+            startDriveAuth()
+        } catch (error: Throwable) {
+            android.util.Log.e(DRIVE_TAG, "drive restore crashed", error)
+            finishRestore(DriveNotice("error", DriveMessages.RESTORE_GENERIC))
+        }
+    }
+
+    private fun startDriveAuth() {
+        try {
             val request = AuthorizationRequest.builder()
                 .setRequestedScopes(listOf(Scope(DriveMessages.SCOPE)))
                 .build()
@@ -274,51 +312,69 @@ class MainActivity : AppCompatActivity(), ZangyoJsBridge.Ui {
                         if (auth.hasResolution()) {
                             val pending = auth.pendingIntent
                             if (pending == null) {
-                                finishDrive(DriveMessages.noticeForStatus(-1))
+                                finishAuth(-1)
                             } else {
                                 driveConsent.launch(IntentSenderRequest.Builder(pending).build())
                             }
                         } else {
                             val token = auth.accessToken
-                            if (token.isNullOrBlank()) finishDrive(DriveMessages.noticeForStatus(-1))
-                            else uploadDrive(token)
+                            if (token.isNullOrBlank()) finishAuth(-1)
+                            else continueDrive(token)
                         }
                     } catch (error: Throwable) {
                         android.util.Log.e(DRIVE_TAG, "drive consent could not start", error)
-                        finishDrive(DriveMessages.noticeForStatus(-1))
+                        finishAuth(-1)
                     }
                 }
                 .addOnFailureListener(this) { error ->
                     try {
                         val code = (error as? ApiException)?.statusCode ?: -1
-                        finishDrive(DriveMessages.noticeForStatus(code))
+                        finishAuth(code)
                     } catch (failure: Throwable) {
                         android.util.Log.e(DRIVE_TAG, "drive failure could not be shown", failure)
                         driveBusy.set(false)
                     }
                 }
         } catch (error: Throwable) {
-            android.util.Log.e(DRIVE_TAG, "drive save crashed", error)
-            finishDrive(DriveNotice("error", DriveMessages.GENERIC))
+            android.util.Log.e(DRIVE_TAG, "drive sign-in crashed", error)
+            finishAuth(-1)
         }
     }
 
     private fun onDriveConsent(resultCode: Int, data: Intent?) {
         try {
             if (resultCode != RESULT_OK || data == null) {
-                finishDrive(DriveNotice("cancel", DriveMessages.CANCEL))
+                finishAuthNotice(DriveNotice("cancel", DriveMessages.CANCEL))
                 return
             }
             val auth = Identity.getAuthorizationClient(this).getAuthorizationResultFromIntent(data)
             val token = auth.accessToken
-            if (token.isNullOrBlank()) finishDrive(DriveMessages.noticeForStatus(-1))
-            else uploadDrive(token)
+            if (token.isNullOrBlank()) finishAuth(-1)
+            else continueDrive(token)
         } catch (error: ApiException) {
-            finishDrive(DriveMessages.noticeForStatus(error.statusCode))
+            finishAuth(error.statusCode)
         } catch (error: Throwable) {
             android.util.Log.e(DRIVE_TAG, "drive consent failed", error)
-            finishDrive(DriveNotice("error", DriveMessages.GENERIC))
+            finishAuth(-1)
         }
+    }
+
+    private fun continueDrive(token: String) {
+        when (driveMode) {
+            "preview" -> previewDrive(token)
+            "download" -> downloadDrive(token)
+            else -> uploadDrive(token)
+        }
+    }
+
+    private fun authNotice(code: Int): DriveNotice {
+        return if (driveMode == "save") DriveMessages.noticeForStatus(code) else DriveMessages.noticeForRestore(code)
+    }
+
+    private fun finishAuth(code: Int) = finishAuthNotice(authNotice(code))
+
+    private fun finishAuthNotice(notice: DriveNotice) {
+        if (driveMode == "save") finishDrive(notice) else finishRestore(notice)
     }
 
     private fun uploadDrive(token: String) {
@@ -347,6 +403,83 @@ class MainActivity : AppCompatActivity(), ZangyoJsBridge.Ui {
                 }
             }
         }.start()
+    }
+
+    private fun previewDrive(token: String) {
+        Thread {
+            val json = try {
+                val file = DriveClient.newestBackup(token, drivePrefix)
+                if (file == null) {
+                    JSONObject().put("ok", false).put("reason", "none").put("message", DriveMessages.NONE).toString()
+                } else {
+                    driveRestoreId = file.id
+                    JSONObject()
+                        .put("ok", true)
+                        .put("phase", "preview")
+                        .put("when", DrivePlan.savedLabel(file.modifiedTime, file.name))
+                        .toString()
+                }
+            } catch (error: DriveFailure) {
+                restoreFailure(error).toString()
+            } catch (error: Throwable) {
+                android.util.Log.e(DRIVE_TAG, "drive lookup failed", error)
+                JSONObject().put("ok", false).put("reason", "error").put("message", DriveMessages.RESTORE_GENERIC).toString()
+            }
+            runOnUiThread {
+                driveBusy.set(false)
+                deliver("window.__zangyoDriveRestore", json)
+            }
+        }.start()
+    }
+
+    private fun downloadDrive(token: String) {
+        val id = driveRestoreId
+        if (id.isNullOrBlank()) {
+            finishRestore(DriveNotice("none", DriveMessages.NONE))
+            return
+        }
+        Thread {
+            val json = try {
+                val text = DriveClient.download(token, id)
+                if (!DrivePlan.looksLikeBackup(text)) {
+                    JSONObject().put("ok", false).put("reason", "bad").put("message", DriveMessages.RESTORE_BAD).toString()
+                } else {
+                    JSONObject().put("ok", true).put("phase", "content").put("content", text).toString()
+                }
+            } catch (error: DriveFailure) {
+                restoreFailure(error).toString()
+            } catch (error: Throwable) {
+                android.util.Log.e(DRIVE_TAG, "drive download failed", error)
+                JSONObject().put("ok", false).put("reason", "error").put("message", DriveMessages.RESTORE_GENERIC).toString()
+            }
+            runOnUiThread {
+                driveBusy.set(false)
+                deliver("window.__zangyoDriveRestore", json)
+            }
+        }.start()
+    }
+
+    private fun restoreFailure(error: DriveFailure): JSONObject {
+        val notice = if (error.notice.reason == "drive-api" || error.notice.reason == "bad") {
+            error.notice
+        } else {
+            DriveMessages.noticeForRestore(-1)
+        }
+        return JSONObject().put("ok", false).put("reason", notice.reason).put("message", notice.message)
+    }
+
+    private fun finishRestore(notice: DriveNotice) {
+        driveBusy.set(false)
+        try {
+            val json = JSONObject()
+                .put("ok", false)
+                .put("reason", notice.reason)
+                .put("message", notice.message)
+                .toString()
+            deliver("window.__zangyoDriveRestore", json)
+        } catch (error: Throwable) {
+            android.util.Log.e(DRIVE_TAG, "drive restore message could not be shown", error)
+        }
     }
 
     private fun finishDrive(notice: DriveNotice) {

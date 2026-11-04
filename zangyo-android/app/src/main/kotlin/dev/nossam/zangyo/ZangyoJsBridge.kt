@@ -12,6 +12,7 @@ class ZangyoJsBridge(
     interface Ui {
         fun shareBackup(name: String, content: String)
         fun saveToDrive(name: String, content: String)
+        fun restoreFromDrive(phase: String)
         fun openPermissions()
         fun requestNotifications()
     }
@@ -39,6 +40,12 @@ class ZangyoJsBridge(
     @JavascriptInterface
     fun saveToDrive(name: String, content: String) {
         main.post { ui.saveToDrive(name, content) }
+    }
+
+    @JavascriptInterface
+    fun restoreFromDrive(phase: String) {
+        val safe = if (phase == "download") "download" else "preview"
+        main.post { ui.restoreFromDrive(safe) }
     }
 
     @JavascriptInterface
