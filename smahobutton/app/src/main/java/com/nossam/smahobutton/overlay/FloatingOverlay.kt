@@ -23,7 +23,9 @@ import com.nossam.smahobutton.logic.GESTURE_LONG
 import com.nossam.smahobutton.logic.GESTURE_TAP
 import com.nossam.smahobutton.logic.GestureSignal
 import com.nossam.smahobutton.logic.ScreenEdge
+import com.nossam.smahobutton.logic.actionIcon
 import com.nossam.smahobutton.logic.actionShort
+import com.nossam.smahobutton.logic.actionTitle
 import com.nossam.smahobutton.logic.clampFraction
 import com.nossam.smahobutton.logic.menuOffsets
 import com.nossam.smahobutton.logic.parseEdge
@@ -43,6 +45,8 @@ class FloatingOverlay(
         fun onMoved(id: String, edge: String, yFraction: Float)
         fun onMenuAction(action: ActionSpec)
     }
+
+    fun hostContext(): Context = context
 
     private val wm = context.getSystemService(WindowManager::class.java)
     private val views = linkedMapOf<String, Holder>()
@@ -126,9 +130,14 @@ class FloatingOverlay(
         button.menu.forEachIndexed { index, action ->
             val (dx, dy) = offsets.getOrElse(index) { 0f to 0f }
             val item = RoundButtonView(context).apply {
-                spec = button.copy(label = actionShort(action), alpha = 1f, shape = "circle")
+                val icon = actionIcon(action)
+                spec = if (icon != null) {
+                    button.copy(label = "", icon = icon, alpha = 1f, shape = "circle")
+                } else {
+                    button.copy(label = actionShort(action), alpha = 1f, shape = "circle")
+                }
                 alpha = 1f
-                contentDescription = actionShort(action)
+                contentDescription = actionTitle(action)
                 setOnClickListener {
                     dismissMenu()
                     callbacks.onMenuAction(action)

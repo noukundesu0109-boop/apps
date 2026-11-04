@@ -30,6 +30,7 @@
             <action android:name="android.intent.action.SEND" />
             <data android:mimeType="application/json" />
         </intent>
+        <package android:name="dev.nossam.task" />
     </queries>
 
     <application

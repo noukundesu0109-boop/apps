@@ -243,6 +243,7 @@ class RoundButtonView(context: Context) : View(context) {
             "lock" -> drawLock(canvas, cx, cy, s, radius)
             "app" -> drawApps(canvas, cx, cy, s)
             "menu" -> drawMenu(canvas, cx, cy, s, radius)
+            "mic" -> drawMic(canvas, cx, cy, s, radius)
             else -> canvas.drawCircle(cx, cy, s * 0.38f, icon)
         }
     }
@@ -339,6 +340,26 @@ class RoundButtonView(context: Context) : View(context) {
         cell(cx + gap, cy - g - gap)
         cell(cx - g - gap, cy + gap)
         cell(cx + gap, cy + gap)
+    }
+
+    private fun drawMic(canvas: Canvas, cx: Float, cy: Float, s: Float, radius: Float) {
+        canvas.drawRoundRect(
+            cx - s * 0.28f,
+            cy - s * 0.95f,
+            cx + s * 0.28f,
+            cy - s * 0.02f,
+            s * 0.28f,
+            s * 0.28f,
+            icon,
+        )
+        icon.style = Paint.Style.STROKE
+        icon.strokeWidth = radius * 0.09f
+        icon.strokeCap = Paint.Cap.ROUND
+        oval.set(cx - s * 0.52f, cy - s * 0.62f, cx + s * 0.52f, cy + s * 0.22f)
+        canvas.drawArc(oval, 0f, 180f, false, icon)
+        canvas.drawLine(cx, cy + s * 0.22f, cx, cy + s * 0.58f, icon)
+        icon.style = Paint.Style.FILL
+        canvas.drawRoundRect(cx - s * 0.38f, cy + s * 0.5f, cx + s * 0.38f, cy + s * 0.7f, 8f, 8f, icon)
     }
 
     private fun drawMenu(canvas: Canvas, cx: Float, cy: Float, s: Float, radius: Float) {

@@ -101,6 +101,7 @@ val ICONS = listOf(
     IconChoice("lock", "ロック"),
     IconChoice("app", "アプリ"),
     IconChoice("menu", "メニュー"),
+    IconChoice("mic", "マイク"),
 )
 
 data class ActionChoice(val type: String, val title: String)
@@ -120,6 +121,7 @@ const val TYPE_NOTIFICATIONS = "notifications"
 const val TYPE_LOCK = "lock"
 const val TYPE_REMEMBER_VOLUME = "remember_volume"
 const val TYPE_SHUTTER = "shutter"
+const val TYPE_TASK_VOICE = "task_voice"
 
 val ACTION_CHOICES = listOf(
     ActionChoice(TYPE_NONE, "なし"),
@@ -137,6 +139,7 @@ val ACTION_CHOICES = listOf(
     ActionChoice(TYPE_LOCK, "画面ロック"),
     ActionChoice(TYPE_REMEMBER_VOLUME, "この画面の音量を覚える"),
     ActionChoice(TYPE_SHUTTER, "カメラのシャッター"),
+    ActionChoice(TYPE_TASK_VOICE, "タスクに声で予定を入れる"),
 )
 
 const val GESTURE_TAP = "tap"
@@ -204,7 +207,14 @@ fun actionShort(action: ActionSpec): String = when (action.type) {
     TYPE_LOCK -> "ロック"
     TYPE_REMEMBER_VOLUME -> "覚える"
     TYPE_SHUTTER -> "カメラ"
+    TYPE_TASK_VOICE -> "声で予定"
     else -> "なし"
+}
+
+/** Icon drawn for this action. The voice action is a microphone. */
+fun actionIcon(action: ActionSpec): String? = when (action.type) {
+    TYPE_TASK_VOICE -> "mic"
+    else -> null
 }
 
 fun paletteArgb(key: String): Long =

@@ -23,7 +23,9 @@ import com.nossam.smahobutton.logic.TYPE_REMEMBER_VOLUME
 import com.nossam.smahobutton.logic.TYPE_RINGER
 import com.nossam.smahobutton.logic.TYPE_SCREENSHOT
 import com.nossam.smahobutton.logic.TYPE_SHUTTER
+import com.nossam.smahobutton.logic.TYPE_TASK_VOICE
 import com.nossam.smahobutton.logic.TYPE_TORCH
+import com.nossam.smahobutton.logic.taskVoiceIntent
 import com.nossam.smahobutton.logic.TYPE_VOLUME_DOWN
 import com.nossam.smahobutton.logic.TYPE_VOLUME_PANEL
 import com.nossam.smahobutton.logic.TYPE_VOLUME_UP
@@ -57,6 +59,31 @@ class ActionExecutor(private val app: SmahoApp) {
             TYPE_LOCK -> global(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN, "画面をロックできませんでした")
             TYPE_REMEMBER_VOLUME -> remember()
             TYPE_SHUTTER -> SmahoRuntime.cameraShutter()
+            TYPE_TASK_VOICE -> openTaskVoice()
+        }
+    }
+
+    private fun openTaskVoice() {
+        val spec = taskVoiceIntent()
+        val installed = try {
+            @Suppress("DEPRECATION")
+            app.packageManager.getPackageInfo(spec.packageName, 0)
+            true
+        } catch (_: Exception) {
+            false
+        }
+        if (!installed) {
+            SmahoRuntime.toast("タスクのアプリが見つかりません")
+            return
+        }
+        val intent = Intent()
+            .setClassName(spec.packageName, spec.className)
+            .putExtra(spec.extraKey, spec.extraValue)
+            .setFlags(spec.flags)
+        try {
+            SmahoRuntime.overlayContext().startActivity(intent)
+        } catch (_: Exception) {
+            SmahoRuntime.toast("タスクのアプリが見つかりません")
         }
     }
 

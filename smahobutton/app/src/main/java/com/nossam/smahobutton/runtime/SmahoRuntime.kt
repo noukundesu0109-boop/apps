@@ -64,6 +64,10 @@ object SmahoRuntime {
 
     val confirmedPackage: String? get() = coordinator.confirmedPackage
 
+    /** Context that already has a window on screen, so a new activity can open from the background. */
+    fun overlayContext(): android.content.Context =
+        a11yOverlay?.hostContext() ?: accessibility ?: serviceOverlay?.hostContext() ?: app
+
     private var audioHooked = false
     private val audioCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = onOutputChanged()

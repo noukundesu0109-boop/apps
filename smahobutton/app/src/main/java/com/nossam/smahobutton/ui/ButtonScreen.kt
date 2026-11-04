@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -45,7 +48,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.verticalScroll
@@ -59,6 +67,7 @@ import com.nossam.smahobutton.logic.PALETTE
 import com.nossam.smahobutton.logic.SHAPE_CHOICES
 import com.nossam.smahobutton.logic.SettingsSpec
 import com.nossam.smahobutton.logic.TYPE_OPEN_APP
+import com.nossam.smahobutton.logic.TYPE_TASK_VOICE
 import com.nossam.smahobutton.logic.actionTitle
 import com.nossam.smahobutton.logic.sizeDp
 import com.nossam.smahobutton.overlay.RoundButtonView
@@ -354,9 +363,53 @@ private fun ActionSheet(
                     onClick = { onPick(choice) },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                 ) {
-                    Text(choice.title, modifier = Modifier.fillMaxWidth())
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        if (choice.type == TYPE_TASK_VOICE) {
+                            MicMark()
+                            Spacer(Modifier.width(10.dp))
+                        }
+                        Text(choice.title)
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MicMark() {
+    val color = MaterialTheme.colorScheme.primary
+    Canvas(Modifier.size(22.dp)) {
+        val s = size.minDimension
+        val cx = s / 2f
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(cx - s * 0.16f, s * 0.06f),
+            size = Size(s * 0.32f, s * 0.46f),
+            cornerRadius = CornerRadius(s * 0.16f, s * 0.16f),
+        )
+        drawArc(
+            color = color,
+            startAngle = 0f,
+            sweepAngle = 180f,
+            useCenter = false,
+            topLeft = Offset(cx - s * 0.28f, s * 0.26f),
+            size = Size(s * 0.56f, s * 0.40f),
+            style = Stroke(width = s * 0.08f, cap = StrokeCap.Round),
+        )
+        drawLine(
+            color = color,
+            start = Offset(cx, s * 0.66f),
+            end = Offset(cx, s * 0.80f),
+            strokeWidth = s * 0.08f,
+            cap = StrokeCap.Round,
+        )
+        drawLine(
+            color = color,
+            start = Offset(cx - s * 0.22f, s * 0.80f),
+            end = Offset(cx + s * 0.22f, s * 0.80f),
+            strokeWidth = s * 0.08f,
+            cap = StrokeCap.Round,
+        )
     }
 }

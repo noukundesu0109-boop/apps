@@ -9,6 +9,7 @@ import com.nossam.smahobutton.logic.ActionSpec
 import com.nossam.smahobutton.logic.AppVolumeSpec
 import com.nossam.smahobutton.logic.ButtonSpec
 import com.nossam.smahobutton.logic.TYPE_OPEN_APP
+import com.nossam.smahobutton.logic.TYPE_TASK_VOICE
 import com.nossam.smahobutton.logic.defaultButton
 import com.nossam.smahobutton.runtime.SmahoRuntime
 import kotlinx.coroutines.launch
@@ -46,10 +47,15 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setGesture(id: String, slot: String, action: ActionSpec) = updateButton(id) { button ->
-        when (slot) {
+        val next = when (slot) {
             "double" -> button.copy(doubleTap = action)
             "long" -> button.copy(longPress = action)
             else -> button.copy(tap = action)
+        }
+        if (action.type == TYPE_TASK_VOICE && next.label.isBlank() && next.icon == "dot") {
+            next.copy(icon = "mic")
+        } else {
+            next
         }
     }
 
