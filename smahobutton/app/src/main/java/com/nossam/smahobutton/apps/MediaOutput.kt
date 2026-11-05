@@ -52,13 +52,20 @@ object MediaOutput {
                 chosen = routed
             }
         }
-        val slot = resolveOutput(chosen, knownKeys, knownNames)
+        val resolved = resolveOutput(chosen, knownKeys, knownNames)
+        val slot = enrich(context, resolved)
         Log.i(
             TAG,
-            "output key=${slot.key} name=${slot.name} bt=${slot.bluetooth} source=$source " +
+            "output key=${slot.key} name=${slot.name} bt=${slot.bluetooth} class=${slot.deviceClass} source=$source " +
                 "routed=${summarize(routed)} connected=${summarize(connected)}",
         )
         return slot
+    }
+
+    private fun enrich(context: Context, slot: OutputSlot): OutputSlot {
+        if (!slot.bluetooth || slot.deviceClass != null) return slot
+        val cls = BluetoothClasses.deviceClass(context, BluetoothClasses.macOf(slot.key)) ?: return slot
+        return slot.copy(deviceClass = cls)
     }
 
     private fun AudioDeviceInfo.toRaw(): RawAudioDevice {

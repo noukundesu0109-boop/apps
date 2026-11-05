@@ -127,11 +127,25 @@ data class VolumeApplyNote(
     val deviceName: String,
     val volume: Int,
     val clock: String,
+    val gradual: Boolean = false,
+    val kind: String = "",
 )
+
+/** Gap between volume-key steps when a car ignores a single jump. */
+const val VOLUME_STEP_GAP_MS = 50L
+
+/** true means raise one notch. Empty when [current] is already [target]. */
+fun volumeStepPlan(current: Int, target: Int): List<Boolean> {
+    if (current == target) return emptyList()
+    val up = target > current
+    return List(kotlin.math.abs(target - current)) { up }
+}
 
 fun volumeApplyLine(note: VolumeApplyNote?): String {
     if (note == null) return "さいごに合わせた: まだありません"
-    return "さいごに合わせた: ${note.appName} / ${note.deviceName} / ${note.volume} / ${note.clock}"
+    val method = if (note.gradual) "じわじわ" else "いっきに"
+    val kind = note.kind.ifBlank { if (note.deviceName == "スマホ") "スマホ" else "Bluetooth" }
+    return "さいごに合わせた: ${note.appName} / ${note.deviceName}（$kind） / ${note.volume} / $method / ${note.clock}"
 }
 
 class ForegroundVolumeCoordinator(val windowMs: Long = 450L) {

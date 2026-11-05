@@ -1,6 +1,8 @@
 package com.nossam.smahobutton.runtime
 
+import android.content.BroadcastReceiver
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioDeviceCallback
@@ -12,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
+import android.view.KeyEvent
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import com.nossam.smahobutton.SmahoApp
@@ -25,7 +28,11 @@ import com.nossam.smahobutton.logic.FilterConfig
 import com.nossam.smahobutton.logic.LEGACY_BLUETOOTH_KEY
 import com.nossam.smahobutton.logic.OutputSlot
 import com.nossam.smahobutton.logic.VOLUME_REINFORCE_AT_MS
+import com.nossam.smahobutton.logic.VOLUME_STEP_GAP_MS
 import com.nossam.smahobutton.logic.VolumeApplyNote
+import com.nossam.smahobutton.logic.displayKind
+import com.nossam.smahobutton.logic.savedDeviceFor
+import com.nossam.smahobutton.logic.useGradualVolume
 import com.nossam.smahobutton.logic.applyForeground
 import com.nossam.smahobutton.logic.canonicalVolumePackage
 import com.nossam.smahobutton.logic.isLauncherPackage
@@ -44,6 +51,7 @@ import com.nossam.smahobutton.overlay.ShutterAim
 import com.nossam.smahobutton.overlay.BubbleToast
 import com.nossam.smahobutton.overlay.FloatingOverlay
 import com.nossam.smahobutton.service.OverlayService
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -80,7 +88,26 @@ object SmahoRuntime {
 
     private var audioHooked = false
     private var settleJob: Job? = null
+    private var stepJob: Job? = null
     private var applyingVolume = false
+    private var applyGeneration = 0
+    private var lastWritten: Int? = null
+    private var userPaused = false
+    private var pausePackage: String? = null
+    private var pauseKey: String? = null
+    private val volumeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+            if (applyingVolume) return
+            val stream = intent?.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1) ?: return
+            if (stream != AudioManager.STREAM_MUSIC) return
+            val value = intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_VALUE", -1)
+            if (value < 0 || value == lastWritten) return
+            userPaused = true
+            settleJob?.cancel()
+            stepJob?.cancel()
+            Log.i(TAG, "manual volume $value, stop reapply")
+        }
+    }
     val lastApply = MutableStateFlow<VolumeApplyNote?>(null)
     private val audioCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = onOutputChanged()
@@ -103,6 +130,14 @@ object SmahoRuntime {
             val handler = Handler(Looper.getMainLooper())
             audio?.registerAudioDeviceCallback(audioCallback, handler)
             audio?.registerAudioPlaybackCallback(playbackCallback, handler)
+            runCatching {
+                ContextCompat.registerReceiver(
+                    app,
+                    volumeReceiver,
+                    IntentFilter("android.media.VOLUME_CHANGED_ACTION"),
+                    ContextCompat.RECEIVER_NOT_EXPORTED,
+                )
+            }
             audioHooked = true
         }
         scope.launch {
@@ -448,7 +483,12 @@ object SmahoRuntime {
         val saved = resolvedVolumes(settings, output)
         val level = saved[packageName] ?: return
         val audio = app.getSystemService(AudioManager::class.java) ?: return
-        Log.i(TAG, "reinforce $reason pkg=$packageName key=${output.key} name=${output.name} level=$level")
+        noteSession(packageName, output.key)
+        if (userPaused) {
+            Log.i(TAG, "skip $reason, user changed the volume")
+            return
+        }
+        Log.i(TAG, "reinforce $reason pkg=$packageName key=${output.key} name=${output.name} level=$level class=${output.deviceClass}")
         val change = applyForeground(
             memory = coordinator.memory,
             packageName = packageName,
@@ -492,6 +532,14 @@ object SmahoRuntime {
             it.packageName to volumeForDevice(it.volume, it.devices, output)
         }
 
+    private fun noteSession(packageName: String, outputKey: String) {
+        if (pausePackage != packageName || pauseKey != outputKey) {
+            userPaused = false
+            pausePackage = packageName
+            pauseKey = outputKey
+        }
+    }
+
     private fun recordAndSet(
         volume: Int?,
         appName: String,
@@ -499,23 +547,74 @@ object SmahoRuntime {
         packageName: String,
         reason: String,
     ) {
-        if (volume == null || applyingVolume) return
+        if (volume == null) return
+        noteSession(packageName, output.key)
+        if (userPaused) return
         val audio = app.getSystemService(AudioManager::class.java) ?: return
         val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         val target = volume.coerceIn(0, max)
+        val settings = repo.state.value
+        val savedDevices = settings?.appVolumes?.find { it.packageName == packageName }?.devices.orEmpty()
+        val gradual = useGradualVolume(savedDevices, output)
+        val kind = displayKind(output, savedDeviceFor(savedDevices, output))
         val clock = java.text.SimpleDateFormat("H:mm:ss", java.util.Locale.JAPAN).format(java.util.Date())
         lastApply.value = VolumeApplyNote(
             appName = appName.ifBlank { packageName },
             deviceName = output.name,
             volume = target,
             clock = clock,
+            gradual = gradual,
+            kind = kind,
         )
-        Log.i(TAG, "apply $reason $packageName ${output.name} key=${output.key} -> $target")
+        Log.i(TAG, "apply $reason $packageName ${output.name} $kind gradual=$gradual key=${output.key} -> $target")
+        val generation = ++applyGeneration
         applyingVolume = true
+        stepJob?.cancel()
+        stepJob = scope.launch {
+            try {
+                if (gradual) stepVolume(audio, target) else jumpVolume(audio, target)
+                lastWritten = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+            } finally {
+                if (generation == applyGeneration) applyingVolume = false
+            }
+        }
+    }
+
+    private suspend fun stepVolume(audio: AudioManager, target: Int) {
+        var guard = 0
+        while (guard < 50) {
+            val now = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+            if (now == target) return
+            val up = now < target
+            val key = if (up) KeyEvent.KEYCODE_VOLUME_UP else KeyEvent.KEYCODE_VOLUME_DOWN
+            val time = SystemClock.uptimeMillis()
+            runCatching {
+                audio.dispatchMediaKeyEvent(KeyEvent(time, time, KeyEvent.ACTION_DOWN, key, 0))
+                audio.dispatchMediaKeyEvent(KeyEvent(time, time, KeyEvent.ACTION_UP, key, 0))
+            }
+            delay(VOLUME_STEP_GAP_MS)
+            if (audio.getStreamVolume(AudioManager.STREAM_MUSIC) == now) {
+                val direction = if (up) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
+                runCatching {
+                    audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
+                }
+                delay(VOLUME_STEP_GAP_MS)
+                if (audio.getStreamVolume(AudioManager.STREAM_MUSIC) == now) {
+                    Log.w(TAG, "volume step stuck at $now toward $target")
+                    return
+                }
+            }
+            lastWritten = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+            guard++
+        }
+    }
+
+    private fun jumpVolume(audio: AudioManager, target: Int) {
+        if (audio.getStreamVolume(AudioManager.STREAM_MUSIC) == target) return
         try {
-            applyVolume(target)
-        } finally {
-            applyingVolume = false
+            audio.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
+        } catch (error: Exception) {
+            Log.w(TAG, "setStreamVolume failed", error)
         }
     }
 
@@ -523,13 +622,7 @@ object SmahoRuntime {
         if (volume == null) return
         val audio = app.getSystemService(AudioManager::class.java) ?: return
         val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-        val target = volume.coerceIn(0, max)
-        if (audio.getStreamVolume(AudioManager.STREAM_MUSIC) == target) return
-        try {
-            audio.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
-        } catch (error: Exception) {
-            Log.w(TAG, "setStreamVolume failed", error)
-        }
+        jumpVolume(audio, volume.coerceIn(0, max))
     }
 
     private fun activeOverlay(): FloatingOverlay? = a11yOverlay ?: serviceOverlay

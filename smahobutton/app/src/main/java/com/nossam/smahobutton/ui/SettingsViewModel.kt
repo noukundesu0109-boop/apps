@@ -94,6 +94,15 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    fun setDeviceGradual(packageName: String, key: String, gradual: Boolean) = edit { settings ->
+        settings.copy(
+            appVolumes = settings.appVolumes.map { entry ->
+                if (entry.packageName != packageName) entry
+                else entry.copy(devices = entry.devices.map { if (it.key == key) it.copy(gradual = gradual) else it })
+            },
+        )
+    }
+
     fun removeDeviceVolume(packageName: String, key: String) = edit { settings ->
         settings.copy(
             appVolumes = settings.appVolumes.map { entry ->

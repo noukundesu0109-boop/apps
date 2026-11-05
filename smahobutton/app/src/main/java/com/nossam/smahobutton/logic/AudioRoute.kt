@@ -14,7 +14,31 @@ data class OutputSlot(
     val key: String,
     val name: String,
     val bluetooth: Boolean,
+    val deviceClass: Int? = null,
 )
+
+/** BluetoothClass.Device values used to tell a car head unit from earbuds. */
+const val BT_CLASS_CAR_AUDIO = 0x0420
+const val BT_CLASS_HANDSFREE = 0x0408
+const val BT_CLASS_HEADPHONES = 0x0418
+const val BT_CLASS_WEARABLE_HEADSET = 0x0404
+const val BT_CLASS_LOUDSPEAKER = 0x0414
+const val BT_CLASS_HIFI = 0x0428
+
+fun isCarAudioClass(deviceClass: Int?): Boolean {
+    val code = deviceClass?.and(0x1FFC) ?: return false
+    return code == BT_CLASS_CAR_AUDIO || code == BT_CLASS_HANDSFREE
+}
+
+fun deviceKindLabel(deviceClass: Int?, bluetooth: Boolean): String {
+    if (!bluetooth) return "スマホ"
+    return when (deviceClass?.and(0x1FFC)) {
+        BT_CLASS_CAR_AUDIO, BT_CLASS_HANDSFREE -> "車"
+        BT_CLASS_HEADPHONES, BT_CLASS_WEARABLE_HEADSET -> "イヤホン"
+        BT_CLASS_LOUDSPEAKER, BT_CLASS_HIFI -> "スピーカー"
+        else -> "Bluetooth"
+    }
+}
 
 val PHONE_SLOT = OutputSlot(key = "", name = "スマホ", bluetooth = false)
 

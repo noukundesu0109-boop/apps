@@ -37,6 +37,9 @@ data class DeviceVolume(
     val key: String,
     val name: String = "",
     val volume: Int = 0,
+    /** null means "use the default for this device's Bluetooth class". */
+    val gradual: Boolean? = null,
+    val kind: String = "",
 )
 
 @Serializable
@@ -398,7 +401,13 @@ fun normalizeDevices(devices: List<DeviceVolume>, legacyCarVolume: Int?): List<D
         val name = device.name.trim().ifEmpty {
             if (key == LEGACY_BLUETOOTH_KEY) LEGACY_BLUETOOTH_NAME else key
         }.take(40)
-        cleaned[key] = DeviceVolume(key, name, device.volume.coerceIn(0, 200))
+        cleaned[key] = DeviceVolume(
+            key = key,
+            name = name,
+            volume = device.volume.coerceIn(0, 200),
+            gradual = device.gradual,
+            kind = device.kind.trim().take(12),
+        )
     }
     if (legacyCarVolume != null && LEGACY_BLUETOOTH_KEY !in cleaned) {
         cleaned[LEGACY_BLUETOOTH_KEY] = DeviceVolume(
@@ -410,19 +419,41 @@ fun normalizeDevices(devices: List<DeviceVolume>, legacyCarVolume: Int?): List<D
     return cleaned.values.toList()
 }
 
-fun volumeForDevice(phone: Int, devices: List<DeviceVolume>, output: OutputSlot): Int {
-    if (!output.bluetooth) return phone
-    devices.firstOrNull { it.key == output.key }?.let { return it.volume }
+fun savedDeviceFor(devices: List<DeviceVolume>, output: OutputSlot): DeviceVolume? {
+    if (!output.bluetooth) return null
+    devices.firstOrNull { it.key == output.key }?.let { return it }
     if (output.name.isNotBlank()) {
         devices.firstOrNull { it.key != LEGACY_BLUETOOTH_KEY && sameDeviceName(it.name, output.name) }
-            ?.let { return it.volume }
+            ?.let { return it }
     }
     if (output.key != LEGACY_BLUETOOTH_KEY) {
-        devices.firstOrNull { it.key == LEGACY_BLUETOOTH_KEY }?.let { return it.volume }
+        devices.firstOrNull { it.key == LEGACY_BLUETOOTH_KEY }?.let { return it }
     }
     val specific = devices.filter { it.key != LEGACY_BLUETOOTH_KEY && it.key.isNotBlank() }
-    if (specific.size == 1) return specific.single().volume
-    return phone
+    if (specific.size == 1) return specific.single()
+    return null
+}
+
+fun volumeForDevice(phone: Int, devices: List<DeviceVolume>, output: OutputSlot): Int {
+    if (!output.bluetooth) return phone
+    return savedDeviceFor(devices, output)?.volume ?: phone
+}
+
+/**
+ * Car head units often ignore one big volume jump. Stepping one notch at a time
+ * matches the volume keys. A saved choice wins; otherwise car audio and hands-free
+ * devices step, and earbuds jump.
+ */
+fun useGradualVolume(devices: List<DeviceVolume>, output: OutputSlot): Boolean {
+    if (!output.bluetooth) return false
+    savedDeviceFor(devices, output)?.gradual?.let { return it }
+    return isCarAudioClass(output.deviceClass)
+}
+
+fun displayKind(output: OutputSlot, saved: DeviceVolume?): String {
+    if (!output.bluetooth) return "スマホ"
+    if (output.deviceClass != null) return deviceKindLabel(output.deviceClass, true)
+    return saved?.kind?.takeIf { it.isNotBlank() } ?: "Bluetooth"
 }
 
 /** Light button colors get dark eyes so the face stays readable. */
@@ -452,7 +483,19 @@ fun rememberVolume(
     val name = (label?.trim()?.takeIf { it.isNotEmpty() } ?: packageName).take(18)
     val level = currentVolume.coerceIn(0, 200)
     val previous = existing.find { it.packageName == packageName }
-    val device = DeviceVolume(output.key, output.name, level)
+    val priorDevice = previous?.devices?.find { it.key == output.key }
+    val device = DeviceVolume(
+        key = output.key,
+        name = output.name,
+        volume = level,
+        gradual = priorDevice?.gradual ?: if (output.bluetooth) isCarAudioClass(output.deviceClass) else null,
+        kind = if (output.bluetooth) {
+            val live = deviceKindLabel(output.deviceClass, true)
+            if (output.deviceClass != null) live else priorDevice?.kind.orEmpty()
+        } else {
+            ""
+        },
+    )
     val saved = when {
         previous == null && output.bluetooth ->
             AppVolumeSpec(packageName, name, level, devices = listOf(device))

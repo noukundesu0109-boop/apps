@@ -217,11 +217,46 @@ class ForegroundVolumeTest {
     }
 
     @Test
+    fun carHeadUnitsStepAndEarbudsJumpUnlessTheUserChooses() {
+        val car = OutputSlot("mac:11:22:33:44:55:66", "Toyota", bluetooth = true, deviceClass = BT_CLASS_CAR_AUDIO)
+        val buds = OutputSlot("mac:AA:BB:CC:DD:EE:FF", "EarFun Clip", bluetooth = true, deviceClass = BT_CLASS_HEADPHONES)
+        val handsfree = OutputSlot("mac:01:02:03:04:05:06", "Handsfree", bluetooth = true, deviceClass = BT_CLASS_HANDSFREE)
+        assertTrue(useGradualVolume(emptyList(), car))
+        assertTrue(useGradualVolume(emptyList(), handsfree))
+        assertTrue(!useGradualVolume(emptyList(), buds))
+        assertTrue(!useGradualVolume(emptyList(), PHONE_SLOT))
+        val saved = listOf(DeviceVolume(car.key, car.name, 8, gradual = false, kind = "車"))
+        assertTrue(!useGradualVolume(saved, car))
+        val forced = listOf(DeviceVolume(buds.key, buds.name, 4, gradual = true, kind = "イヤホン"))
+        assertTrue(useGradualVolume(forced, buds))
+        assertEquals(listOf(true, true, true), volumeStepPlan(5, 8))
+        assertEquals(listOf(false, false), volumeStepPlan(8, 6))
+        assertTrue(volumeStepPlan(4, 4).isEmpty())
+        assertEquals("車", deviceKindLabel(BT_CLASS_CAR_AUDIO, true))
+        assertEquals("イヤホン", deviceKindLabel(BT_CLASS_HEADPHONES, true))
+        assertEquals("スマホ", deviceKindLabel(null, false))
+        val remembered = rememberVolume(
+            "com.amazon.avod.thirdpartyclient",
+            "Prime Video",
+            8,
+            emptyList(),
+            filter,
+            output = car,
+        )
+        assertEquals(true, remembered.updated.single().devices.single().gradual)
+        assertEquals("車", remembered.updated.single().devices.single().kind)
+    }
+
+    @Test
     fun theVolumeScreenLineShowsTheLastApply() {
         assertEquals("さいごに合わせた: まだありません", volumeApplyLine(null))
         assertEquals(
-            "さいごに合わせた: Prime Video / EarFun Clip / 12 / 19:42:01",
-            volumeApplyLine(VolumeApplyNote("Prime Video", "EarFun Clip", 12, "19:42:01")),
+            "さいごに合わせた: Prime Video / EarFun Clip（イヤホン） / 12 / いっきに / 19:42:01",
+            volumeApplyLine(VolumeApplyNote("Prime Video", "EarFun Clip", 12, "19:42:01", kind = "イヤホン")),
+        )
+        assertEquals(
+            "さいごに合わせた: Prime Video / Toyota（車） / 8 / じわじわ / 19:42:01",
+            volumeApplyLine(VolumeApplyNote("Prime Video", "Toyota", 8, "19:42:01", gradual = true, kind = "車")),
         )
         assertEquals(longArrayOf(500L, 1500L, 3000L).toList(), VOLUME_REINFORCE_AT_MS.toList())
     }

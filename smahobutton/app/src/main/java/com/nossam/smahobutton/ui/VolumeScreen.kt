@@ -35,11 +35,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.nossam.smahobutton.apps.BluetoothClasses
 import com.nossam.smahobutton.apps.InstalledApps
 import com.nossam.smahobutton.logic.AppSuggestion
 import com.nossam.smahobutton.logic.AppVolumeSpec
 import com.nossam.smahobutton.logic.DeviceVolume
 import com.nossam.smahobutton.logic.SettingsSpec
+import com.nossam.smahobutton.logic.isCarAudioClass
 import com.nossam.smahobutton.logic.suggestApps
 import com.nossam.smahobutton.logic.volumeApplyLine
 import com.nossam.smahobutton.runtime.SmahoRuntime
@@ -137,6 +139,7 @@ fun VolumeScreen(
                     maxVolume = maxVolume,
                     onPhone = { viewModel.setAppVolume(entry.packageName, it) },
                     onDevice = { key, level -> viewModel.setDeviceVolume(entry.packageName, key, level) },
+                    onGradual = { key, on -> viewModel.setDeviceGradual(entry.packageName, key, on) },
                     onDeleteDevice = { key -> viewModel.removeDeviceVolume(entry.packageName, key) },
                     onRemove = { viewModel.removeAppVolume(entry.packageName) },
                 )
@@ -168,6 +171,7 @@ private fun VolumeRow(
     maxVolume: Int,
     onPhone: (Int) -> Unit,
     onDevice: (String, Int) -> Unit,
+    onGradual: (String, Boolean) -> Unit,
     onDeleteDevice: (String) -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -197,7 +201,7 @@ private fun VolumeRow(
                 steps = (maxVolume - 1).coerceAtLeast(0),
             )
             entry.devices.forEach { device ->
-                DeviceSlider(device, maxVolume, onDevice, onDeleteDevice)
+                DeviceSlider(device, maxVolume, onDevice, onGradual, onDeleteDevice)
             }
             if (entry.devices.isEmpty()) {
                 Text(
@@ -215,6 +219,7 @@ private fun DeviceSlider(
     device: DeviceVolume,
     maxVolume: Int,
     onDevice: (String, Int) -> Unit,
+    onGradual: (String, Boolean) -> Unit,
     onDeleteDevice: (String) -> Unit,
 ) {
     var level by remember(device.key, device.volume) {
@@ -235,4 +240,18 @@ private fun DeviceSlider(
         valueRange = 0f..maxVolume.toFloat(),
         steps = (maxVolume - 1).coerceAtLeast(0),
     )
+    val context = LocalContext.current
+    val liveClass = remember(device.key) {
+        BluetoothClasses.deviceClass(context, BluetoothClasses.macOf(device.key))
+    }
+    val gradual = device.gradual ?: (isCarAudioClass(liveClass) || device.kind == "車")
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "車で音量が変わらないとき用（じわじわ合わせる）",
+            modifier = Modifier.weight(1f).padding(end = 8.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Switch(checked = gradual, onCheckedChange = { onGradual(device.key, it) })
+    }
 }
