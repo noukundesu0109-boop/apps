@@ -36,8 +36,11 @@ import com.nossam.smahobutton.logic.mapSelectionToBitmap
 import com.nossam.smahobutton.logic.moveSelection
 import com.nossam.smahobutton.logic.resizeSelection
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
+import com.nossam.smahobutton.logic.ReadPass
+import com.nossam.smahobutton.logic.pickReadText
 
 /**
  * Full-screen frozen screenshot. The user draws a rectangle, then saves or copies the text inside.
@@ -55,6 +58,7 @@ class RegionCapture(
     private var canvasView: RegionView? = null
     private var actions: LinearLayout? = null
     private var editor: LinearLayout? = null
+    private var reading: TextView? = null
     private var savedUri: android.net.Uri? = null
     private var closed = false
 
@@ -225,26 +229,105 @@ class RegionCapture(
         }
         val crop = currentCrop()
         if (crop == null) {
-            showEditor(textIn(rect))
+            finishRead(null, textIn(rect))
             return
         }
+        showReading()
+        val enlarged = RegionImages.upscale(crop)
+        if (enlarged !== crop) crop.recycle()
+        val gray = RegionImages.grayContrast(enlarged)
         val recognizer = TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
-        recognizer.process(InputImage.fromBitmap(crop, 0))
-            .addOnSuccessListener { vision ->
-                crop.recycle()
-                val ocr = vision.text.trim()
-                val text = ocr.ifEmpty { textIn(rect) }
-                showEditor(text)
+        recognizer.process(InputImage.fromBitmap(enlarged, 0))
+            .addOnSuccessListener { colorResult ->
+                recognizer.process(InputImage.fromBitmap(gray, 0))
+                    .addOnSuccessListener { grayResult ->
+                        recycleQuietly(enlarged, gray)
+                        recognizer.close()
+                        finishRead(
+                            pickReadText(
+                                ReadPass(colorResult.text, confidenceOf(colorResult)),
+                                ReadPass(grayResult.text, confidenceOf(grayResult)),
+                                textIn(rect),
+                            ),
+                            fallback = null,
+                        )
+                    }
+                    .addOnFailureListener {
+                        recycleQuietly(enlarged, gray)
+                        recognizer.close()
+                        finishRead(
+                            pickReadText(
+                                ReadPass(colorResult.text, confidenceOf(colorResult)),
+                                ReadPass("", 0f),
+                                textIn(rect),
+                            ),
+                            fallback = null,
+                        )
+                    }
             }
             .addOnFailureListener {
-                crop.recycle()
-                showEditor(textIn(rect))
+                recycleQuietly(enlarged, gray)
+                recognizer.close()
+                finishRead(null, textIn(rect))
             }
     }
 
+    private fun finishRead(chosen: String?, fallback: String?) {
+        hideReading()
+        val text = chosen?.trim().orEmpty().ifEmpty { fallback?.trim().orEmpty() }
+        if (text.length < 2) {
+            onMessage("文字をうまく読めなかった。もっと大きく囲むか、明るいところで試してね")
+            return
+        }
+        showEditor(text)
+    }
+
+    private fun confidenceOf(result: Text): Float {
+        var sum = 0f
+        for (block in result.textBlocks) {
+            for (line in block.lines) {
+                sum += line.confidence.coerceAtLeast(0f)
+            }
+        }
+        return sum
+    }
+
+    private fun recycleQuietly(vararg bitmaps: Bitmap) {
+        for (item in bitmaps) {
+            if (!item.isRecycled) item.recycle()
+        }
+    }
+
+    private fun showReading() {
+        val host = root ?: return
+        if (reading != null) return
+        val label = TextView(context).apply {
+            text = "読んでる…"
+            setTextColor(Color.WHITE)
+            textSize = 20f
+            setBackgroundColor(0xCC222222.toInt())
+            val pad = context.dp(12)
+            setPadding(pad, pad, pad, pad)
+        }
+        val (insetTop, _) = insets()
+        host.addView(label, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER_HORIZONTAL,
+        ).apply { topMargin = insetTop + context.dp(12) })
+        reading = label
+    }
+
+    private fun hideReading() {
+        val label = reading ?: return
+        reading = null
+        root?.removeView(label)
+    }
+
     private fun showEditor(text: String) {
+        hideReading()
         if (text.isBlank()) {
-            onMessage("文字が見つからなかったよ")
+            onMessage("文字をうまく読めなかった。もっと大きく囲むか、明るいところで試してね")
             return
         }
         val host = root ?: return
