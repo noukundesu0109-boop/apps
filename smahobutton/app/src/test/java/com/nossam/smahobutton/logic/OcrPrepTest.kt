@@ -37,6 +37,38 @@ class OcrPrepTest {
         )
         assertEquals("静岡麦", vertical.text)
         assertEquals(1, vertical.verticalColumns)
+        val stacked = joinLines(
+            listOf(
+                OcrLine("生", 10, 200, 70, 280, 0.9f),
+                OcrLine("SAPPORO", 90, 320, 360, 370, 0.9f),
+            ),
+        )
+        assertEquals("生\nSAPPORO", stacked.text)
+    }
+
+    @Test
+    fun digitLookalikesChangeOnlyNextToDigits() {
+        assertEquals("麦芽1009%ビール", tidyDigitLookalikes("麦芽!009%ビール"))
+        assertEquals("100", tidyDigitLookalikes("1O0"))
+        assertEquals("SHIZUOKA", tidyDigitLookalikes("SHIZUOKA"))
+        assertEquals("謹製", tidyDigitLookalikes("謹製"))
+    }
+
+    @Test
+    fun aSharperLatinLineReplacesOnlyThatLine() {
+        val base = listOf(
+            OcrLine("静岡工場謹製", 10, 20, 200, 60, 0.8f),
+            OcrLine("BAKUUsYU", 10, 80, 240, 120, 0.4f),
+        )
+        val donor = listOf(OcrLine("BAKUSHU", 12, 82, 230, 118, 0.9f))
+        val merged = spliceLatinLines(base, donor)
+        assertEquals("静岡工場謹製", merged[0].text)
+        assertEquals("BAKUSHU", merged[1].text)
+        val digits = spliceDigitLines(
+            listOf(OcrLine("麦芽!009%ビール", 10, 10, 300, 50, 0.4f)),
+            listOf(OcrLine("麦芽100%ビール", 10, 12, 300, 48, 0.8f)),
+        )
+        assertEquals("麦芽100%ビール", digits.single().text)
     }
 
     @Test

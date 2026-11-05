@@ -21,6 +21,9 @@ data class ReadPass(
     val text: String,
     val confidence: Float,
     val verticalColumns: Int = 0,
+    val lines: List<OcrLine> = emptyList(),
+    val digitFriendly: Boolean = false,
+    val latinStrong: Boolean = false,
 )
 
 data class OcrLine(
@@ -66,8 +69,10 @@ fun readScore(pass: ReadPass): Float {
     val quality = readQuality(pass.text)
     if (quality <= 0f) return 0f
     val japanese = japaneseRatio(pass.text)
+    val digitBoost = if (pass.digitFriendly && digitScore(pass.text) > 0) 6f else 0f
+    val latinBoost = if (pass.latinStrong) latinLetters(pass.text) * 0.2f else 0f
     return quality * (1f + pass.confidence.coerceAtLeast(0f)) * (1f + 0.35f * japanese) +
-        pass.verticalColumns * 2f
+        pass.verticalColumns * 2f + digitBoost + latinBoost
 }
 
 /** Share of kana and kanji among letters. Latin-only labels stay at 0 and are still usable. */
@@ -99,8 +104,7 @@ fun joinLines(lines: List<OcrLine>): JoinedRead {
     val rows = mutableListOf<MutableList<LineToken>>()
     for (token in tokens.sortedWith(compareBy({ it.top }, { it.left }))) {
         val row = rows.lastOrNull()
-        val height = (token.bottom - token.top).coerceAtLeast(1)
-        if (row != null && token.top <= row.minOf { it.top } + height * 0.55f) {
+        if (row != null && row.any { sameBand(it, token) }) {
             row += token
         } else {
             rows += mutableListOf(token)
@@ -119,6 +123,15 @@ private data class LineToken(
     val right: Int,
     val bottom: Int,
 )
+
+private fun sameBand(a: LineToken, b: LineToken): Boolean {
+    val overlap = min(a.bottom, b.bottom) - max(a.top, b.top)
+    val minHeight = min(a.bottom - a.top, b.bottom - b.top).coerceAtLeast(1)
+    if (overlap < minHeight * 0.35f) return false
+    val centerA = (a.top + a.bottom) / 2f
+    val centerB = (b.top + b.bottom) / 2f
+    return kotlin.math.abs(centerA - centerB) <= minHeight * 0.5f
+}
 
 private fun lineToken(line: OcrLine) = LineToken(
     line.text.trim(),
@@ -169,13 +182,100 @@ private fun joinRow(parts: List<String>): String {
         if (out.isNotEmpty()) {
             val prev = out.last()
             val next = piece.first()
-            if (prev.code < 128 && next.code < 128 && prev.isLetterOrDigit() && next.isLetterOrDigit()) {
+            if (isLatinToken(prev) != isLatinToken(next) || (isLatinToken(prev) && isLatinToken(next))) {
                 out.append(' ')
             }
         }
         out.append(piece)
     }
     return out.toString()
+}
+
+private fun isLatinToken(ch: Char): Boolean = ch.code < 128 && ch.isLetterOrDigit()
+
+/**
+ * Replaces a mostly-Latin line with the same line from a sharper Latin pass
+ * when that pass read at least as many letters.
+ */
+fun spliceLatinLines(base: List<OcrLine>, donors: List<OcrLine>): List<OcrLine> {
+    if (base.isEmpty() || donors.isEmpty()) return base
+    val latinDonors = donors.filter { latinRatio(it.text) >= 0.5f }
+    return base.map { line ->
+        if (latinRatio(line.text) < 0.45f) return@map line
+        val match = latinDonors.minByOrNull { kotlin.math.abs(centerY(it) - centerY(line)) } ?: return@map line
+        val close = kotlin.math.abs(centerY(match) - centerY(line)) <= lineHeight(line) * 0.8f
+        val lengthClose = kotlin.math.abs(match.text.trim().length - line.text.trim().length) <= 2
+        val clearer = match.confidence > line.confidence + 0.2f && lengthClose
+        val richer = latinLetters(match.text) > latinLetters(line.text)
+        if (close && (richer || clearer)) line.copy(text = match.text.trim()) else line
+    }
+}
+
+/** Prefers a high-contrast read of a line that already looks like a number or a percent. */
+fun spliceDigitLines(base: List<OcrLine>, donors: List<OcrLine>): List<OcrLine> {
+    if (base.isEmpty() || donors.isEmpty()) return base
+    val digitDonors = donors.filter { digitScore(it.text) > 0 }
+    return base.map { line ->
+        if (digitScore(line.text) == 0 && '!' !in line.text) return@map line
+        val match = digitDonors.minByOrNull { kotlin.math.abs(centerY(it) - centerY(line)) } ?: return@map line
+        val close = kotlin.math.abs(centerY(match) - centerY(line)) <= lineHeight(line) * 0.8f
+        if (close && digitScore(match.text) > digitScore(line.text)) line.copy(text = match.text.trim()) else line
+    }
+}
+
+fun refineRead(passes: List<ReadPass>, accessibility: String): String? {
+    val usable = passes.filter { it.text.trim().length >= 2 }
+    val winner = usable.maxByOrNull { readScore(it) }
+    val ocr = if (winner == null) {
+        ""
+    } else {
+        val latinDonors = passes.filter { it.latinStrong }.flatMap { it.lines }
+        val digitDonors = passes.filter { it.digitFriendly }.flatMap { it.lines }
+        val merged = spliceDigitLines(spliceLatinLines(winner.lines, latinDonors), digitDonors)
+        val joined = if (merged.isEmpty()) winner.text else joinLines(merged).text
+        tidyDigitLookalikes(joined.ifBlank { winner.text })
+    }
+    return pickReadText(listOf(ReadPass(ocr, winner?.confidence ?: 0f, winner?.verticalColumns ?: 0)), accessibility)
+}
+
+/**
+ * Only fixes symbols that sit against digits. Kanji and ordinary words are left alone.
+ * "100" read as "!009" becomes "1009"; an O between digits becomes 0.
+ */
+fun tidyDigitLookalikes(text: String): String {
+    if (text.isEmpty()) return text
+    val chars = text.toCharArray()
+    for (index in chars.indices) {
+        val prev = chars.getOrNull(index - 1)
+        val next = chars.getOrNull(index + 1)
+        val prevDigit = prev != null && (prev.isDigit() || prev == '%' || prev == '％')
+        val nextDigit = next != null && (next.isDigit() || next == '%' || next == '％')
+        when (chars[index]) {
+            '!' -> if (prevDigit || nextDigit) chars[index] = '1'
+            'l', 'I' -> if (prevDigit && nextDigit) chars[index] = '1'
+            'O' -> if (prevDigit && nextDigit) chars[index] = '0'
+        }
+    }
+    return String(chars)
+}
+
+private fun centerY(line: OcrLine) = (line.top + line.bottom) / 2
+
+private fun lineHeight(line: OcrLine) = (line.bottom - line.top).coerceAtLeast(1)
+
+private fun latinLetters(text: String) = text.count { it in 'A'..'Z' || it in 'a'..'z' }
+
+private fun latinRatio(text: String): Float {
+    val trimmed = text.trim()
+    if (trimmed.isEmpty()) return 0f
+    return latinLetters(trimmed).toFloat() / trimmed.count { !it.isWhitespace() }.coerceAtLeast(1)
+}
+
+private fun digitScore(text: String): Int {
+    val digits = text.count { it.isDigit() }
+    val percent = if ('%' in text || '％' in text) 2 else 0
+    val bangs = text.count { it == '!' }
+    return digits * 2 + percent - bangs * 3
 }
 
 fun readQuality(text: String): Float {

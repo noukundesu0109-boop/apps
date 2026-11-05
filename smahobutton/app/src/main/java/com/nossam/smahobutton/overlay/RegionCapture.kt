@@ -44,6 +44,7 @@ import com.nossam.smahobutton.logic.OcrLine
 import com.nossam.smahobutton.logic.ReadPass
 import com.nossam.smahobutton.logic.joinLines
 import com.nossam.smahobutton.logic.pickReadText
+import com.nossam.smahobutton.logic.refineRead
 
 /**
  * Full-screen frozen screenshot. The user draws a rectangle, then saves or copies the text inside.
@@ -238,29 +239,31 @@ class RegionCapture(
         showReading()
         val base = RegionImages.prepareBase(crop)
         if (base !== crop) crop.recycle()
-        val made = listOf(
-            base,
-            RegionImages.grayContrast(base),
-            RegionImages.equalize(base),
-            RegionImages.adaptiveBinary(base),
-            RegionImages.gammaBright(base),
+        val sharpLatin = RegionImages.sharpenStrong(base)
+        val jobs = listOf(
+            OcrJob(base, digitFriendly = false, latinStrong = true),
+            OcrJob(RegionImages.grayContrast(base), digitFriendly = true, latinStrong = false),
+            OcrJob(RegionImages.equalize(base), digitFriendly = false, latinStrong = false),
+            OcrJob(RegionImages.adaptiveBinary(base), digitFriendly = true, latinStrong = false),
+            OcrJob(RegionImages.gammaBright(base), digitFriendly = false, latinStrong = false),
+            OcrJob(sharpLatin, digitFriendly = false, latinStrong = true),
         )
         val recognizer = TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
         val passes = ArrayList<ReadPass>()
         fun finish() {
             recognizer.close()
-            recycleQuietly(*made.toTypedArray())
-            finishRead(pickReadText(passes, textIn(rect)), fallback = null)
+            recycleQuietly(*jobs.map { it.bitmap }.distinct().toTypedArray())
+            finishRead(refineRead(passes, textIn(rect)), fallback = null)
         }
         fun step(index: Int, rotation: Int) {
-            if (index >= made.size) {
+            if (index >= jobs.size) {
                 finish()
                 return
             }
-            val image = made[index]
-            recognizer.process(InputImage.fromBitmap(image, rotation))
+            val job = jobs[index]
+            recognizer.process(InputImage.fromBitmap(job.bitmap, rotation))
                 .addOnSuccessListener { result ->
-                    passes += passFrom(result)
+                    passes += passFrom(result, job.digitFriendly, job.latinStrong && rotation == 0)
                     if (rotation == 0) step(index, 90) else step(index + 1, 0)
                 }
                 .addOnFailureListener {
@@ -270,24 +273,36 @@ class RegionCapture(
         step(0, 0)
     }
 
-    private fun passFrom(result: Text): ReadPass {
+    private data class OcrJob(val bitmap: Bitmap, val digitFriendly: Boolean, val latinStrong: Boolean)
+
+    private fun passFrom(result: Text, digitFriendly: Boolean, latinStrong: Boolean): ReadPass {
         val lines = ArrayList<OcrLine>()
         for (block in result.textBlocks) {
             for (line in block.lines) {
-                val box = line.boundingBox ?: continue
-                lines += OcrLine(
-                    text = line.text,
-                    left = box.left,
-                    top = box.top,
-                    right = box.right,
-                    bottom = box.bottom,
-                    confidence = line.confidence.coerceAtLeast(0f),
-                )
+                val elements = line.elements
+                if (elements.isEmpty()) {
+                    val box = line.boundingBox ?: continue
+                    lines += OcrLine(line.text, box.left, box.top, box.right, box.bottom, line.confidence.coerceAtLeast(0f))
+                    continue
+                }
+                for (element in elements) {
+                    val box = element.boundingBox ?: continue
+                    val text = element.text?.trim().orEmpty()
+                    if (text.isEmpty()) continue
+                    lines += OcrLine(
+                        text = text,
+                        left = box.left,
+                        top = box.top,
+                        right = box.right,
+                        bottom = box.bottom,
+                        confidence = element.confidence.coerceAtLeast(0f),
+                    )
+                }
             }
         }
         val joined: JoinedRead = joinLines(lines)
         val confidence = lines.sumOf { it.confidence.toDouble() }.toFloat()
-        return ReadPass(joined.text, confidence, joined.verticalColumns)
+        return ReadPass(joined.text, confidence, joined.verticalColumns, lines, digitFriendly, latinStrong)
     }
 
     private fun finishRead(chosen: String?, fallback: String?) {
@@ -298,6 +313,14 @@ class RegionCapture(
             return
         }
         showEditor(text)
+        maybeOnceHint()
+    }
+
+    private fun maybeOnceHint() {
+        val prefs = context.getSharedPreferences("smahobutton_hints", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("ocr_closeup_hint", false)) return
+        prefs.edit().putBoolean("ocr_closeup_hint", true).apply()
+        onMessage("文字が小さいときは、もっと近くで撮った写真を大きく囲むと読みやすいよ")
     }
 
     private fun recycleQuietly(vararg bitmaps: Bitmap) {

@@ -26,7 +26,9 @@ object RegionImages {
         return sharp
     }
 
-    fun sharpen(source: Bitmap): Bitmap {
+    fun sharpenStrong(source: Bitmap): Bitmap = sharpen(source, neighbor = 0.28f, centerWeight = 2.12f)
+
+    fun sharpen(source: Bitmap, neighbor: Float = 0.15f, centerWeight: Float = 1.6f): Bitmap {
         val width = source.width
         val height = source.height
         if (width < 3 || height < 3) return source
@@ -47,13 +49,13 @@ object RegionImages {
                 )
                 val center = pixels[index]
                 for (pixel in neighbors) {
-                    r -= Color.red(pixel) * 0.15f
-                    g -= Color.green(pixel) * 0.15f
-                    b -= Color.blue(pixel) * 0.15f
+                    r -= Color.red(pixel) * neighbor
+                    g -= Color.green(pixel) * neighbor
+                    b -= Color.blue(pixel) * neighbor
                 }
-                r += Color.red(center) * 1.6f
-                g += Color.green(center) * 1.6f
-                b += Color.blue(center) * 1.6f
+                r += Color.red(center) * centerWeight
+                g += Color.green(center) * centerWeight
+                b += Color.blue(center) * centerWeight
                 out[index] = Color.argb(
                     Color.alpha(center),
                     r.roundToInt().coerceIn(0, 255),
