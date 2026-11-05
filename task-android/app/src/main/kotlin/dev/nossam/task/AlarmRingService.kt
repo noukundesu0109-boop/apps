@@ -19,7 +19,9 @@ import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import dev.nossam.task.plan.MemoPlanner
+import dev.nossam.task.plan.TaskBoard
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 class AlarmRingService : Service() {
     private var player: MediaPlayer? = null
@@ -30,6 +32,8 @@ class AlarmRingService : Service() {
     private var kind: String = ""
     private var itemId: String = ""
     private var tabId: String = ""
+    private var ringDate: String = ""
+    private var ringTime: String = ""
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -52,6 +56,8 @@ class AlarmRingService : Service() {
                 val laterKind = kind
                 val laterItem = itemId
                 val laterTab = tabId
+                val laterDate = ringDate
+                val laterTime = ringTime
                 closedByButton.set(true)
                 stopRinging()
                 TaskAlarms.snooze(
@@ -62,6 +68,8 @@ class AlarmRingService : Service() {
                     laterKind,
                     laterItem,
                     laterTab,
+                    laterDate,
+                    laterTime,
                 )
                 return START_NOT_STICKY
             }
@@ -72,9 +80,25 @@ class AlarmRingService : Service() {
                 val snoozeKind = kind
                 val snoozeItem = itemId
                 val snoozeTab = tabId
+                val snoozeDate = ringDate
+                val snoozeTime = ringTime
                 closedByButton.set(true)
                 stopRinging()
-                TaskAlarms.snooze(this, snoozeTitle, snoozeDetail, kind = snoozeKind, itemId = snoozeItem, tabId = snoozeTab)
+                TaskAlarms.snooze(
+                    this,
+                    snoozeTitle,
+                    snoozeDetail,
+                    kind = snoozeKind,
+                    itemId = snoozeItem,
+                    tabId = snoozeTab,
+                    origDate = snoozeDate,
+                    origTime = snoozeTime,
+                )
+                return START_NOT_STICKY
+            }
+            AlarmIntents.ACTION_QUIET -> {
+                closedByButton.set(true)
+                stopRinging()
                 return START_NOT_STICKY
             }
             AlarmIntents.ACTION_SWIPE -> {
@@ -92,6 +116,9 @@ class AlarmRingService : Service() {
         kind = intent?.getStringExtra(AlarmIntents.EXTRA_KIND).orEmpty()
         itemId = intent?.getStringExtra(AlarmIntents.EXTRA_ITEM).orEmpty()
         tabId = intent?.getStringExtra(AlarmIntents.EXTRA_TAB).orEmpty()
+        ringDate = intent?.getStringExtra(AlarmIntents.EXTRA_DATE).orEmpty()
+        ringTime = intent?.getStringExtra(AlarmIntents.EXTRA_TIME).orEmpty()
+        live.set(LiveRing(kind, itemId, tabId, ringDate, ringTime))
         closedByButton.set(false)
         ensureAlarmChannel(this)
         val type = if (Build.VERSION.SDK_INT >= 34) {
@@ -163,6 +190,8 @@ class AlarmRingService : Service() {
             putExtra(AlarmIntents.EXTRA_KIND, kind)
             putExtra(AlarmIntents.EXTRA_ITEM, itemId)
             putExtra(AlarmIntents.EXTRA_TAB, tabId)
+            putExtra(AlarmIntents.EXTRA_DATE, ringDate)
+            putExtra(AlarmIntents.EXTRA_TIME, ringTime)
         }
     }
 
@@ -172,6 +201,8 @@ class AlarmRingService : Service() {
         intent.getStringExtra(AlarmIntents.EXTRA_KIND)?.let { kind = it }
         intent.getStringExtra(AlarmIntents.EXTRA_ITEM)?.let { itemId = it }
         intent.getStringExtra(AlarmIntents.EXTRA_TAB)?.let { tabId = it }
+        intent.getStringExtra(AlarmIntents.EXTRA_DATE)?.let { ringDate = it }
+        intent.getStringExtra(AlarmIntents.EXTRA_TIME)?.let { ringTime = it }
     }
 
     private fun stopFromButton(markDone: Boolean) {
@@ -193,6 +224,8 @@ class AlarmRingService : Service() {
             putExtra(AlarmIntents.EXTRA_KIND, kind)
             putExtra(AlarmIntents.EXTRA_ITEM, itemId)
             putExtra(AlarmIntents.EXTRA_TAB, tabId)
+            putExtra(AlarmIntents.EXTRA_DATE, ringDate)
+            putExtra(AlarmIntents.EXTRA_TIME, ringTime)
         }
     }
 
@@ -268,6 +301,7 @@ class AlarmRingService : Service() {
     private fun stopRinging() {
         releaseSound()
         ringing.set(false)
+        live.set(null)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -302,7 +336,30 @@ class AlarmRingService : Service() {
     companion object {
         private val ringing = AtomicBoolean(false)
         private val closedByButton = AtomicBoolean(false)
+        private val live = AtomicReference<LiveRing?>(null)
 
         fun isRinging(): Boolean = ringing.get()
+
+        fun ringIsStale(board: TaskBoard): Boolean {
+            val current = live.get() ?: return false
+            return !MemoPlanner.ringStillMatches(board, current.kind, current.itemId, current.tabId, current.date, current.time)
+        }
+
+        fun quietItem(context: Context, kind: String, itemId: String, tabId: String) {
+            val current = live.get() ?: return
+            if (!MemoPlanner.sameSnoozeItem(kind, itemId, tabId, current.kind, current.itemId, current.tabId)) return
+            try {
+                context.startService(Intent(context, AlarmRingService::class.java).setAction(AlarmIntents.ACTION_QUIET))
+            } catch (_: Exception) {
+            }
+        }
     }
 }
+
+private data class LiveRing(
+    val kind: String,
+    val itemId: String,
+    val tabId: String,
+    val date: String,
+    val time: String,
+)

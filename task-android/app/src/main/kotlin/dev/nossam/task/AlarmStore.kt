@@ -18,6 +18,8 @@ internal data class StoredSnooze(
     val kind: String = "",
     val itemId: String = "",
     val tabId: String = "",
+    val origDate: String = "",
+    val origTime: String = "",
 )
 
 internal class AlarmStore(context: Context) {
@@ -54,6 +56,8 @@ internal class AlarmStore(context: Context) {
                             kind = item.optString("kind"),
                             itemId = item.optString("item"),
                             tabId = item.optString("tab"),
+                            origDate = item.optString("origDate"),
+                            origTime = item.optString("origTime"),
                         ),
                     )
                 }
@@ -74,7 +78,9 @@ internal class AlarmStore(context: Context) {
                     .put("detail", item.detail)
                     .put("kind", item.kind)
                     .put("item", item.itemId)
-                    .put("tab", item.tabId),
+                    .put("tab", item.tabId)
+                    .put("origDate", item.origDate)
+                    .put("origTime", item.origTime),
             )
         }
         write(file("snoozes.json"), JSONObject().put("items", array).toString())

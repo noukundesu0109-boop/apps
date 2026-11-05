@@ -24,6 +24,73 @@ object MemoPlanner {
     fun snoozeTrigger(nowMillis: Long, minutes: Int = SNOOZE_MINUTES): Long =
         nowMillis + minutes * 60_000L
 
+    /**
+     * A "later" snooze stays only while the same occurrence is still waiting.
+     * Records saved before the original time was stored stay until the item is
+     * gone or marked done.
+     */
+    fun keepSnooze(board: TaskBoard, hold: SnoozeHold): Boolean {
+        if (hold.itemId.isBlank()) return true
+        val slot = occurrence(board, hold.kind, hold.itemId, hold.tabId) ?: return false
+        if (slot.done) return false
+        val origDate = hold.origDate?.takeIf { it.isNotBlank() }
+        val origTime = hold.origTime?.takeIf { it.isNotBlank() }
+        if (origDate == null || origTime == null) return true
+        if (slot.date != origDate || slot.time != origTime) return false
+        val trigger = occurrenceMillis(slot.date, slot.time) ?: return false
+        return trigger <= hold.atMillis
+    }
+
+    fun keepSnoozes(board: TaskBoard, holds: List<SnoozeHold>): List<SnoozeHold> =
+        holds.filter { keepSnooze(board, it) }
+
+    /** The alarm that is ringing should stop once that occurrence is no longer due. */
+    fun ringStillMatches(board: TaskBoard, kind: String, itemId: String, tabId: String, date: String, time: String): Boolean {
+        if (itemId.isBlank()) return true
+        val slot = occurrence(board, kind, itemId, tabId) ?: return false
+        if (slot.done) return false
+        if (date.isBlank() || time.isBlank()) return true
+        return slot.date == date && slot.time == time
+    }
+
+    fun sameSnoozeItem(kind: String, itemId: String, tabId: String, otherKind: String, otherId: String, otherTab: String): Boolean {
+        if (kind != otherKind || itemId.isBlank() || itemId != otherId) return false
+        if (tabId.isNotBlank() && otherTab.isNotBlank() && tabId != otherTab) return false
+        return true
+    }
+
+    private fun occurrence(board: TaskBoard, kind: String, itemId: String, tabId: String): Occurrence? {
+        return when (kind) {
+            KIND_MEMO -> {
+                val memo = board.memos.find { it.id == itemId } ?: return null
+                Occurrence(memo.due, memo.time, memo.done)
+            }
+            KIND_CLEAN -> {
+                val item = board.cleaning.find { it.id == itemId } ?: return null
+                Occurrence(shownDate(nextCleanDate(item.done, item.cycle), item.shift)?.toString(), item.time, false)
+            }
+            KIND_BOUSAI -> {
+                val item = board.bousai.find { it.id == itemId } ?: return null
+                val date = shownDate(parseDate(item.due), item.shift)?.toString()
+                Occurrence(date, item.time, date == null)
+            }
+            else -> {
+                val car = board.cars.find { it.id == itemId && (tabId.isBlank() || it.tabId == tabId) }
+                if (car != null) {
+                    return Occurrence(shownDate(nextCarDate(car.done, car.months), car.shift)?.toString(), car.time, false)
+                }
+                val extra = board.extras.find { it.id == itemId && (tabId.isBlank() || it.tabId == tabId) } ?: return null
+                Occurrence(shownDate(nextCarDate(extra.done, extra.months), extra.shift)?.toString(), extra.time, false)
+            }
+        }
+    }
+
+    private fun occurrenceMillis(date: String?, time: String?): Long? {
+        val day = parseDate(date) ?: return null
+        val clock = parseTime(time) ?: return null
+        return day.atTime(clock).atZone(ZONE).toInstant().toEpochMilli()
+    }
+
     fun plan(memos: List<MemoEntry>, now: ZonedDateTime): List<PlannedMemoAlarm> {
         val nowZ = now.withZoneSameInstant(ZONE)
         val nowInstant = nowZ.toInstant()
@@ -313,6 +380,18 @@ object MemoPlanner {
     }
 }
 
+data class SnoozeHold(
+    val id: String,
+    val atMillis: Long,
+    val kind: String,
+    val itemId: String,
+    val tabId: String = "",
+    val origDate: String? = null,
+    val origTime: String? = null,
+)
+
+private data class Occurrence(val date: String?, val time: String?, val done: Boolean)
+
 data class MemoEntry(
     val id: String,
     val text: String,
@@ -335,6 +414,8 @@ data class PlannedMemoAlarm(
     val kind: String = MemoPlanner.KIND_MEMO,
     val tabId: String = "",
     val leadMinutes: Int = 0,
+    val sourceDate: String = "",
+    val sourceTime: String = "",
 )
 
 data class TaskBoard(

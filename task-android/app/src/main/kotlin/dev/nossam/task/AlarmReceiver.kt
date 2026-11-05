@@ -15,6 +15,7 @@ internal class AlarmReceiver : BroadcastReceiver() {
         val detail = intent.getStringExtra(AlarmIntents.EXTRA_DETAIL)
         val source = intent.getStringExtra(AlarmIntents.EXTRA_SOURCE)
         val date = intent.getStringExtra(AlarmIntents.EXTRA_DATE)
+        val time = intent.getStringExtra(AlarmIntents.EXTRA_TIME)
         Thread {
             try {
                 if (action == AlarmIntents.ACTION_SUMMARY) {
@@ -42,6 +43,8 @@ internal class AlarmReceiver : BroadcastReceiver() {
                         putExtra(AlarmIntents.EXTRA_KIND, intent.getStringExtra(AlarmIntents.EXTRA_KIND))
                         putExtra(AlarmIntents.EXTRA_ITEM, intent.getStringExtra(AlarmIntents.EXTRA_ITEM))
                         putExtra(AlarmIntents.EXTRA_TAB, intent.getStringExtra(AlarmIntents.EXTRA_TAB))
+                        putExtra(AlarmIntents.EXTRA_DATE, date)
+                        putExtra(AlarmIntents.EXTRA_TIME, time)
                     }
                     try {
                         ContextCompat.startForegroundService(app, service)

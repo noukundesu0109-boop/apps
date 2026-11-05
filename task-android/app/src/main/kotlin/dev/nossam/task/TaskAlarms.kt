@@ -10,6 +10,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import dev.nossam.task.plan.MemoPlanner
 import dev.nossam.task.plan.PlannedMemoAlarm
+import dev.nossam.task.plan.SnoozeHold
 import dev.nossam.task.plan.TaskBoard
 import dev.nossam.task.plan.completeOccurrence
 import dev.nossam.task.plan.parseBoard
@@ -70,6 +71,8 @@ internal object TaskAlarms {
         kind: String = "",
         itemId: String = "",
         tabId: String = "",
+        origDate: String = "",
+        origTime: String = "",
     ) {
         val app = context.applicationContext
         val schedule = synchronized(lock) {
@@ -85,6 +88,8 @@ internal object TaskAlarms {
                     kind = kind,
                     itemId = itemId,
                     tabId = tabId,
+                    origDate = origDate,
+                    origTime = origTime,
                 ),
             )
             rebuild(app)
@@ -128,9 +133,11 @@ internal object TaskAlarms {
                 val today = ZonedDateTime.now(MemoPlanner.ZONE).toLocalDate().toString()
                 store.writeWork(completeOccurrence(json, kind, itemId, tabId, today))
                 store.addPendingDone(StoredDone(kind, itemId, tabId))
+                store.writeSnoozes(store.readSnoozes().filterNot { sameItem(it, kind, itemId, tabId) })
             }
             rebuild(app)
         }
+        AlarmRingService.quietItem(app, kind, itemId, tabId)
         UiBridge.publishSchedule(schedule)
         UiBridge.publishDone(JSONObject().put("kind", kind).put("id", itemId).put("tabId", tabId).toString())
     }
@@ -223,7 +230,9 @@ internal object TaskAlarms {
         val board = readBoard(store)
         val now = ZonedDateTime.now(MemoPlanner.ZONE)
         val planned = MemoPlanner.planAlerts(board, now).toMutableList()
-        val snoozes = store.readSnoozes().filter { it.atMillis > System.currentTimeMillis() + 5_000L }
+        val snoozes = store.readSnoozes()
+            .filter { it.atMillis > System.currentTimeMillis() + 5_000L }
+            .filter { MemoPlanner.keepSnooze(board, it.toHold()) }
         store.writeSnoozes(snoozes)
         for (snooze in snoozes) {
             val zoned = Instant.ofEpochMilli(snooze.atMillis).atZone(MemoPlanner.ZONE)
@@ -237,6 +246,8 @@ internal object TaskAlarms {
                 itemId = snooze.itemId,
                 kind = snooze.kind.ifBlank { MemoPlanner.KIND_MEMO },
                 tabId = snooze.tabId,
+                sourceDate = snooze.origDate,
+                sourceTime = snooze.origTime,
             )
         }
         planned.sortWith(compareBy({ it.triggerAtMillis }, { it.id }))
@@ -261,6 +272,7 @@ internal object TaskAlarms {
         }
         store.writeCodes(codes)
         NextTaskNotice.update(context, if (board.nextTaskNotice) MemoPlanner.nextToday(board, now) else null)
+        quietStaleRing(context, board)
         Log.i(TAG, "scheduled ${planned.size} alarms exact=$exact summary=${summaryAt.toLocalTime()}")
         return plannedMemosToJson(planned)
     }
@@ -320,6 +332,8 @@ internal object TaskAlarms {
             putExtra(AlarmIntents.EXTRA_KIND, alarm.kind)
             putExtra(AlarmIntents.EXTRA_ITEM, alarm.itemId)
             putExtra(AlarmIntents.EXTRA_TAB, alarm.tabId)
+            putExtra(AlarmIntents.EXTRA_DATE, alarm.sourceDate.ifBlank { alarm.date })
+            putExtra(AlarmIntents.EXTRA_TIME, alarm.sourceTime.ifBlank { alarm.time })
         }
         val operation = PendingIntent.getBroadcast(
             context,
@@ -444,6 +458,31 @@ internal object TaskAlarms {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+    }
+
+    private fun quietStaleRing(context: Context, board: TaskBoard) {
+        if (!AlarmRingService.ringIsStale(board)) return
+        try {
+            context.startService(Intent(context, AlarmRingService::class.java).setAction(AlarmIntents.ACTION_QUIET))
+        } catch (error: Exception) {
+            Log.w(TAG, "could not stop the ringing alarm", error)
+        }
+    }
+
+    private fun StoredSnooze.toHold(): SnoozeHold {
+        return SnoozeHold(
+            id = id,
+            atMillis = atMillis,
+            kind = kind,
+            itemId = itemId,
+            tabId = tabId,
+            origDate = origDate.ifBlank { null },
+            origTime = origTime.ifBlank { null },
+        )
+    }
+
+    private fun sameItem(snooze: StoredSnooze, kind: String, itemId: String, tabId: String): Boolean {
+        return MemoPlanner.sameSnoozeItem(kind, itemId, tabId, snooze.kind, snooze.itemId, snooze.tabId)
     }
 
     private fun maintenanceAt(now: ZonedDateTime): Long {

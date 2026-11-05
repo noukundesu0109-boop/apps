@@ -27,6 +27,8 @@ class AlarmActivity : AppCompatActivity() {
     private var kindText = ""
     private var itemText = ""
     private var tabText = ""
+    private var dateText = ""
+    private var timeText = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,6 +84,8 @@ class AlarmActivity : AppCompatActivity() {
         kindText = intent.getStringExtra(AlarmIntents.EXTRA_KIND).orEmpty()
         itemText = intent.getStringExtra(AlarmIntents.EXTRA_ITEM).orEmpty()
         tabText = intent.getStringExtra(AlarmIntents.EXTRA_TAB).orEmpty()
+        dateText = intent.getStringExtra(AlarmIntents.EXTRA_DATE).orEmpty()
+        timeText = intent.getStringExtra(AlarmIntents.EXTRA_TIME).orEmpty()
         findViewById<TextView>(R.id.alarmTitle).text = titleText
         findViewById<TextView>(R.id.alarmDetail).text = detailText
     }
@@ -103,6 +107,8 @@ class AlarmActivity : AppCompatActivity() {
             putExtra(AlarmIntents.EXTRA_KIND, kindText)
             putExtra(AlarmIntents.EXTRA_ITEM, itemText)
             putExtra(AlarmIntents.EXTRA_TAB, tabText)
+            putExtra(AlarmIntents.EXTRA_DATE, dateText)
+            putExtra(AlarmIntents.EXTRA_TIME, timeText)
         }
     }
 }
