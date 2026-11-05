@@ -47,6 +47,7 @@ import com.nossam.smahobutton.logic.ShutterSpot
 import com.nossam.smahobutton.logic.isCameraPackage
 import com.nossam.smahobutton.logic.orientationKey
 import com.nossam.smahobutton.logic.SettingsSpec
+import com.nossam.smahobutton.overlay.RegionCapture
 import com.nossam.smahobutton.overlay.ShutterAim
 import com.nossam.smahobutton.overlay.BubbleToast
 import com.nossam.smahobutton.overlay.FloatingOverlay
@@ -265,6 +266,54 @@ object SmahoRuntime {
 
     private var pendingShutter = false
     private var aim: ShutterAim? = null
+    private var region: RegionCapture? = null
+
+    fun beginRegionCapture() {
+        val service = accessibility
+        if (service == null) {
+            toast("ユーザー補助をオンにしてください")
+            return
+        }
+        if (android.os.Build.VERSION.SDK_INT < 30) {
+            toast("この囲みは、新しいスマホで使えます")
+            return
+        }
+        region?.dismiss()
+        holdHidden = true
+        refreshButtons()
+        scope.launch {
+            delay(220)
+            val current = accessibility
+            if (current == null) {
+                holdHidden = false
+                refreshButtons()
+                toast("ユーザー補助をオンにしてください")
+                return@launch
+            }
+            current.captureScreen { bitmap ->
+                if (bitmap == null) {
+                    holdHidden = false
+                    refreshButtons()
+                    toast("画面を取れませんでした。ユーザー補助を入れ直してください")
+                    return@captureScreen
+                }
+                val overlay = RegionCapture(
+                    context = current,
+                    windowType = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    bitmap = bitmap,
+                    textIn = { current.textInside(it) },
+                    onDismiss = {
+                        region = null
+                        holdHidden = false
+                        refreshButtons()
+                    },
+                    onMessage = { message -> toast(message) },
+                )
+                region = overlay
+                overlay.show()
+            }
+        }
+    }
 
     fun cameraShutter() {
         val foreground = confirmedPackage

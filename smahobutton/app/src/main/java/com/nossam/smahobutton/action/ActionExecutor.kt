@@ -19,6 +19,7 @@ import com.nossam.smahobutton.logic.TYPE_NONE
 import com.nossam.smahobutton.logic.TYPE_NOTIFICATIONS
 import com.nossam.smahobutton.logic.TYPE_OPEN_APP
 import com.nossam.smahobutton.logic.TYPE_RECENTS
+import com.nossam.smahobutton.logic.TYPE_REGION
 import com.nossam.smahobutton.logic.TYPE_REMEMBER_VOLUME
 import com.nossam.smahobutton.logic.TYPE_RINGER
 import com.nossam.smahobutton.logic.TYPE_SCREENSHOT
@@ -46,6 +47,7 @@ class ActionExecutor(private val app: SmahoApp) {
         when (action.type) {
             TYPE_NONE, "" -> Unit
             TYPE_SCREENSHOT -> screenshot()
+            TYPE_REGION -> SmahoRuntime.beginRegionCapture()
             TYPE_OPEN_APP -> openApp(action.packageName)
             TYPE_TORCH -> toggleTorch()
             TYPE_VOLUME_UP -> adjust(AudioManager.ADJUST_RAISE)

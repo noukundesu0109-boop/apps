@@ -5,12 +5,20 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
 import android.content.ComponentCallbacks
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.graphics.Path
 import android.graphics.Rect
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.view.Display
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import com.nossam.smahobutton.logic.PixelRect
+import com.nossam.smahobutton.logic.TextSnippet
+import com.nossam.smahobutton.logic.snippetsTouching
 import com.nossam.smahobutton.logic.AppWindow
 import com.nossam.smahobutton.logic.FilterConfig
 import com.nossam.smahobutton.logic.isCameraPackage
@@ -113,6 +121,73 @@ class SmahoAccessibilityService : AccessibilityService() {
             AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
             AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         serviceInfo = info
+    }
+
+    fun captureScreen(onResult: (Bitmap?) -> Unit) {
+        if (Build.VERSION.SDK_INT < 30) {
+            onResult(null)
+            return
+        }
+        val main = Handler(Looper.getMainLooper())
+        takeScreenshot(
+            Display.DEFAULT_DISPLAY,
+            { command -> main.post(command) },
+            object : TakeScreenshotCallback {
+                override fun onSuccess(screenshot: ScreenshotResult) {
+                    val bitmap = runCatching {
+                        val hardware = Bitmap.wrapHardwareBuffer(
+                            screenshot.hardwareBuffer,
+                            screenshot.colorSpace,
+                        )
+                        screenshot.hardwareBuffer.close()
+                        val soft = hardware?.copy(Bitmap.Config.ARGB_8888, false)
+                        hardware?.recycle()
+                        soft
+                    }.getOrNull()
+                    onResult(bitmap)
+                }
+
+                override fun onFailure(errorCode: Int) {
+                    onResult(null)
+                }
+            },
+        )
+    }
+
+    fun textInside(rect: PixelRect): String {
+        val snippets = ArrayList<TextSnippet>()
+        val listed = runCatching { windows }.getOrNull().orEmpty()
+        for (window in listed) {
+            var root: AccessibilityNodeInfo? = null
+            try {
+                root = window.root
+                if (root != null) collectText(root, snippets)
+            } catch (_: Exception) {
+            } finally {
+                runCatching { root?.recycle() }
+                runCatching { window.recycle() }
+            }
+        }
+        return snippetsTouching(snippets, rect)
+    }
+
+    private fun collectText(node: AccessibilityNodeInfo, out: MutableList<TextSnippet>) {
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
+        val text = node.text?.toString()?.trim().orEmpty().ifEmpty {
+            node.contentDescription?.toString()?.trim().orEmpty()
+        }
+        if (text.isNotEmpty() && bounds.width() > 0 && bounds.height() > 0) {
+            out += TextSnippet(bounds.left, bounds.top, bounds.right, bounds.bottom, text)
+        }
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            try {
+                collectText(child, out)
+            } finally {
+                runCatching { child.recycle() }
+            }
+        }
     }
 
     fun pressShutter(onDone: (Boolean) -> Unit) {
