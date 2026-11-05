@@ -83,6 +83,18 @@ class CropRectTest {
         )
         assertEquals("囲み\n続き", snippetsTouching(snippets, PixelRect(30, 30, 90, 90)))
         assertEquals("", snippetsTouching(snippets, PixelRect(0, 0, 0, 0)))
+        val photo = PixelRect(200, 800, 700, 1100)
+        val nodes = listOf(
+            TextSnippet(40, 80, 500, 160, "2025年11月29日"),
+            TextSnippet(0, 0, 1080, 80, "時刻"),
+            TextSnippet(0, 2200, 1080, 2400, "ナビ"),
+            TextSnippet(0, 0, 1080, 2400, "写真全体"),
+            TextSnippet(200, 800, 700, 1100, "いっぱい"),
+        )
+        assertEquals("いっぱい", snippetsInside(nodes, photo, statusBarBottom = 120, navBarTop = 2200))
+        val mapped = mapSelectionToBitmap(Selection(100f, 400f, 400f, 900f), 1080, 2400, 1080, 2400)
+        assertTrue(mapped.width < 1080)
+        assertTrue(mapped.height < 2400)
     }
 
     @Test

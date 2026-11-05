@@ -37,6 +37,8 @@ data class OcrLine(
 
 data class JoinedRead(val text: String, val verticalColumns: Int)
 
+data class ShownRead(val text: String?, val source: String)
+
 /**
  * Picks one string for the edit box.
  * Empty or one-character OCR passes are dropped. When both passes remain, the higher
@@ -53,17 +55,46 @@ fun pickReadText(passes: List<ReadPass>, accessibility: String): String? {
         usable.size == 1 -> usable[0].text.trim()
         else -> usable.maxBy { readScore(it) }.text.trim()
     }
-    val a11y = accessibility.trim()
-    val ocrQuality = readQuality(ocr)
-    val a11yQuality = readQuality(a11y)
+    return shownRead(ocr, accessibility).text
+}
+
+/**
+ * The cropped photo wins whenever it has a real reading.
+ * Accessibility text is only the fallback, and a gallery date header is not that fallback.
+ */
+fun shownRead(ocr: String, accessibility: String): ShownRead {
+    val ocrText = ocr.trim()
+    val screenText = accessibility.trim()
+    val screenUsable = if (isGalleryDate(screenText) && screenText != ocrText) "" else screenText
     return when {
-        ocrQuality <= 0f && a11yQuality <= 0f -> null
-        ocrQuality <= 0f -> a11y
-        a11yQuality <= 0f -> ocr
-        a11yQuality >= ocrQuality * 1.35f && a11y.length > ocr.length -> a11y
-        else -> ocr
+        isMeaningfulRead(ocrText) -> ShownRead(ocrText, "画像の文字")
+        screenUsable.length >= 2 && readQuality(screenUsable) > 0f -> ShownRead(screenUsable, "画面の文字")
+        ocrText.length >= 2 -> ShownRead(ocrText, "画像の文字")
+        else -> ShownRead(null, "")
     }
 }
+
+fun isMeaningfulRead(text: String): Boolean {
+    val trimmed = text.trim()
+    if (trimmed.length < 2 || isGalleryDate(trimmed)) return false
+    var japanese = 0
+    var letters = 0
+    for (ch in trimmed) {
+        if (ch.isWhitespace()) continue
+        val code = ch.code
+        if (code in 0x3040..0x30FF || code in 0x4E00..0x9FFF) japanese++
+        if (ch.isLetter()) letters++
+    }
+    return japanese >= 2 || letters >= 2
+}
+
+fun isGalleryDate(text: String): Boolean {
+    val compact = text.trim().replace(" ", "").replace("\n", "")
+    if (compact.length > 24) return false
+    return GALLERY_DATE.matches(compact)
+}
+
+private val GALLERY_DATE = Regex("""^\d{4}年?\d{1,2}月\d{1,2}日?$|^\d{4}[./-]\d{1,2}[./-]\d{1,2}$""")
 
 fun readScore(pass: ReadPass): Float {
     val quality = readQuality(pass.text)
@@ -223,7 +254,7 @@ fun spliceDigitLines(base: List<OcrLine>, donors: List<OcrLine>): List<OcrLine> 
     }
 }
 
-fun refineRead(passes: List<ReadPass>, accessibility: String): String? {
+fun refineRead(passes: List<ReadPass>, accessibility: String): ShownRead {
     val usable = passes.filter { it.text.trim().length >= 2 }
     val winner = usable.maxByOrNull { readScore(it) }
     val ocr = if (winner == null) {
@@ -235,7 +266,7 @@ fun refineRead(passes: List<ReadPass>, accessibility: String): String? {
         val joined = if (merged.isEmpty()) winner.text else joinLines(merged).text
         tidyDigitLookalikes(joined.ifBlank { winner.text })
     }
-    return pickReadText(listOf(ReadPass(ocr, winner?.confidence ?: 0f, winner?.verticalColumns ?: 0)), accessibility)
+    return shownRead(ocr, accessibility)
 }
 
 /**

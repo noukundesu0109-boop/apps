@@ -28,6 +28,8 @@ import com.nossam.smahobutton.dp
 import com.nossam.smahobutton.logic.Corner
 import com.nossam.smahobutton.logic.PixelRect
 import com.nossam.smahobutton.logic.Selection
+import com.nossam.smahobutton.logic.ShownRead
+import com.nossam.smahobutton.logic.shownRead
 import com.nossam.smahobutton.logic.buttonRowTop
 import com.nossam.smahobutton.logic.clampSelection
 import com.nossam.smahobutton.logic.containsPoint
@@ -199,9 +201,24 @@ class RegionCapture(
         val box = view.committed ?: return null
         val rect = mapSelectionToBitmap(box, view.width, view.height, bitmap.width, bitmap.height)
         if (rect.width < 2 || rect.height < 2) return null
+        if (rect.width >= bitmap.width && rect.height >= bitmap.height) return null
         return runCatching {
             Bitmap.createBitmap(bitmap, rect.left, rect.top, rect.width, rect.height)
         }.getOrNull()
+    }
+
+    private fun screenText(): String {
+        val view = canvasView ?: return ""
+        val box = view.committed?.normalized() ?: return ""
+        val loc = IntArray(2)
+        view.getLocationOnScreen(loc)
+        val rect = PixelRect(
+            (box.left + loc[0]).toInt(),
+            (box.top + loc[1]).toInt(),
+            (box.right + loc[0]).toInt(),
+            (box.bottom + loc[1]).toInt(),
+        )
+        return textIn(rect)
     }
 
     private fun saveCrop(shareAfter: Boolean) {
@@ -233,7 +250,7 @@ class RegionCapture(
         }
         val crop = currentCrop()
         if (crop == null) {
-            finishRead(null, textIn(rect))
+            finishRead(shownRead("", screenText()))
             return
         }
         showReading()
@@ -253,7 +270,7 @@ class RegionCapture(
         fun finish() {
             recognizer.close()
             recycleQuietly(*jobs.map { it.bitmap }.distinct().toTypedArray())
-            finishRead(refineRead(passes, textIn(rect)), fallback = null)
+            finishRead(refineRead(passes, screenText()))
         }
         fun step(index: Int, rotation: Int) {
             if (index >= jobs.size) {
@@ -305,14 +322,14 @@ class RegionCapture(
         return ReadPass(joined.text, confidence, joined.verticalColumns, lines, digitFriendly, latinStrong)
     }
 
-    private fun finishRead(chosen: String?, fallback: String?) {
+    private fun finishRead(shown: ShownRead) {
         hideReading()
-        val text = chosen?.trim().orEmpty().ifEmpty { fallback?.trim().orEmpty() }
+        val text = shown.text?.trim().orEmpty()
         if (text.length < 2) {
             onMessage("文字をうまく読めなかった。もっと大きく囲むか、明るいところで試してね")
             return
         }
-        showEditor(text)
+        showEditor(text, shown.source)
         maybeOnceHint()
     }
 
@@ -355,7 +372,7 @@ class RegionCapture(
         root?.removeView(label)
     }
 
-    private fun showEditor(text: String) {
+    private fun showEditor(text: String, source: String) {
         hideReading()
         if (text.isBlank()) {
             onMessage("文字をうまく読めなかった。もっと大きく囲むか、明るいところで試してね")
@@ -403,6 +420,14 @@ class RegionCapture(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             ))
+            if (source.isNotBlank()) {
+                addView(TextView(context).apply {
+                    this.text = "さいごに使った読み取り: $source"
+                    setTextColor(0xFF666666.toInt())
+                    textSize = 12f
+                    setPadding(0, context.dp(6), 0, 0)
+                })
+            }
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 val gap = context.dp(8)

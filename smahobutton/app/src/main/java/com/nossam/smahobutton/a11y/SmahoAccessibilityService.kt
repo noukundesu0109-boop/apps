@@ -18,7 +18,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import com.nossam.smahobutton.logic.PixelRect
 import com.nossam.smahobutton.logic.TextSnippet
-import com.nossam.smahobutton.logic.snippetsTouching
+import com.nossam.smahobutton.logic.snippetsInside
 import com.nossam.smahobutton.logic.AppWindow
 import com.nossam.smahobutton.logic.FilterConfig
 import com.nossam.smahobutton.logic.isCameraPackage
@@ -168,7 +168,17 @@ class SmahoAccessibilityService : AccessibilityService() {
                 runCatching { window.recycle() }
             }
         }
-        return snippetsTouching(snippets, rect)
+        val screenHeight = if (Build.VERSION.SDK_INT >= 30) {
+            getSystemService(WindowManager::class.java).currentWindowMetrics.bounds.height()
+        } else {
+            resources.displayMetrics.heightPixels
+        }
+        return snippetsInside(snippets, rect, barHeight("status_bar_height"), screenHeight - barHeight("navigation_bar_height"))
+    }
+
+    private fun barHeight(name: String): Int {
+        val id = resources.getIdentifier(name, "dimen", "android")
+        return if (id > 0) resources.getDimensionPixelSize(id) else 0
     }
 
     private fun collectText(node: AccessibilityNodeInfo, out: MutableList<TextSnippet>) {

@@ -86,6 +86,16 @@ class OcrPrepTest {
     }
 
     @Test
+    fun aPhotoReadingBeatsTheGalleryDate() {
+        val shown = shownRead("いっぱい\nたべや〜", "2025年11月29日")
+        assertEquals("いっぱい\nたべや〜", shown.text)
+        assertEquals("画像の文字", shown.source)
+        assertNull(shownRead("", "20251月29日").text)
+        assertEquals("画面の設定", shownRead("あ", "画面の設定").text)
+        assertEquals("画面の文字", shownRead("あ", "画面の設定").source)
+    }
+
+    @Test
     fun accessibilityReplacesAWeakReadWhenItIsClearlyBetter() {
         val weak = ReadPass("あ", 0.2f)
         assertEquals("画面の設定", pickReadText(weak, ReadPass("", 0f), "画面の設定"))

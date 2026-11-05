@@ -153,3 +153,47 @@ fun snippetsTouching(snippets: List<TextSnippet>, rect: PixelRect): String {
     }
     return lines.distinct().joinToString("\n")
 }
+
+/**
+ * Keeps a node only when most of it, including its center, sits inside the selection.
+ * Drops the status bar, the navigation bar, and a full-screen container that merely overlaps the box.
+ */
+fun snippetsInside(
+    snippets: List<TextSnippet>,
+    rect: PixelRect,
+    statusBarBottom: Int,
+    navBarTop: Int,
+): String {
+    if (rect.isEmpty()) return ""
+    val lines = snippets.mapNotNull { snippet ->
+        val text = snippet.text.trim()
+        if (text.isEmpty() || !nodeBelongsToSelection(snippet, rect, statusBarBottom, navBarTop)) {
+            null
+        } else {
+            text
+        }
+    }
+    return lines.distinct().joinToString("\n")
+}
+
+fun nodeBelongsToSelection(
+    snippet: TextSnippet,
+    rect: PixelRect,
+    statusBarBottom: Int,
+    navBarTop: Int,
+): Boolean {
+    val nodeWidth = snippet.right - snippet.left
+    val nodeHeight = snippet.bottom - snippet.top
+    if (nodeWidth <= 0 || nodeHeight <= 0 || rect.isEmpty()) return false
+    val centerY = (snippet.top + snippet.bottom) / 2
+    if (centerY <= statusBarBottom) return false
+    if (navBarTop > 0 && centerY >= navBarTop) return false
+    val overlapWidth = minOf(snippet.right, rect.right) - maxOf(snippet.left, rect.left)
+    val overlapHeight = minOf(snippet.bottom, rect.bottom) - maxOf(snippet.top, rect.top)
+    if (overlapWidth <= 0 || overlapHeight <= 0) return false
+    val overlap = overlapWidth.toLong() * overlapHeight
+    val area = nodeWidth.toLong() * nodeHeight
+    if (overlap * 2 < area) return false
+    val centerX = (snippet.left + snippet.right) / 2
+    return centerX in rect.left until rect.right && centerY in rect.top until rect.bottom
+}
