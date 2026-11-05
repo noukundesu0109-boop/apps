@@ -41,6 +41,7 @@ import dev.nossam.task.drive.DriveNotice
 import dev.nossam.task.drive.DrivePlan
 import dev.nossam.task.voice.VoiceCommand
 import dev.nossam.task.voice.VoiceCommandParser
+import dev.nossam.task.voice.VoiceListen
 import dev.nossam.task.voice.VoiceMemoParser
 import org.json.JSONObject
 import java.io.File
@@ -61,6 +62,8 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
     private var commandToken = 0
     private var activeCommandToken = 0
     private var commandRetries = 0
+    private var silenceRestarts = 0
+    private var silenceEpoch = 0
     private var commandWatch: Runnable? = null
     private var speech: SpeechRecognizer? = null
     private var fileCallback: ValueCallback<Array<Uri>>? = null
@@ -243,13 +246,16 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         ensureMic(forCommand = true) {
             commandToken += 1
             commandRetries = 1
-            beginCommandListen(commandToken)
+            silenceRestarts = 0
+            beginCommandListen(commandToken, armWatch = true)
         }
     }
 
     override fun stopVoice() {
         commandToken += 1
         commandRetries = 0
+        silenceRestarts = 0
+        silenceEpoch += 1
         voiceHandler.removeCallbacksAndMessages(null)
         cancelRecognizer()
         deliverListen(false)
@@ -265,7 +271,7 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
 
-    private fun beginCommandListen(token: Int) {
+    private fun beginCommandListen(token: Int, armWatch: Boolean) {
         if (token != commandToken) return
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             deliverCommandMessage(getString(R.string.voice_unavailable))
@@ -282,7 +288,10 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         } catch (_: Throwable) {
         }
         deliverListen(true)
-        watchCommand(token)
+        if (armWatch) {
+            silenceRestarts = 0
+            watchCommand(token)
+        }
         try {
             recognizer.startListening(commandIntent())
         } catch (_: Throwable) {
@@ -292,14 +301,34 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
 
     private fun watchCommand(token: Int) {
         clearCommandWatch()
-        val watch = Runnable { if (token == commandToken) onCommandMiss(token) }
+        val watch = Runnable {
+            if (token != commandToken) return@Runnable
+            silenceEpoch += 1
+            cancelRecognizer()
+            onCommandMiss(token)
+        }
         commandWatch = watch
-        voiceHandler.postDelayed(watch, 12_000)
+        voiceHandler.postDelayed(watch, VoiceListen.COMMAND_WATCH_MILLIS)
     }
 
     private fun clearCommandWatch() {
         commandWatch?.let { voiceHandler.removeCallbacks(it) }
         commandWatch = null
+    }
+
+    private fun Intent.putUnhurriedListen() {
+        putExtra(
+            RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
+            VoiceListen.COMPLETE_SILENCE_MILLIS.toLong(),
+        )
+        putExtra(
+            RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+            VoiceListen.POSSIBLY_COMPLETE_SILENCE_MILLIS.toLong(),
+        )
+        putExtra(
+            RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,
+            VoiceListen.MINIMUM_LENGTH_MILLIS.toLong(),
+        )
     }
 
     private fun commandIntent(): Intent {
@@ -310,6 +339,7 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
             putExtra(RecognizerIntent.EXTRA_PROMPT, getString(R.string.voice_command_prompt))
+            putUnhurriedListen()
         }
     }
 
@@ -360,9 +390,22 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
             val token = activeCommandToken
             if (token != commandToken) return
             if (error == SpeechRecognizer.ERROR_CLIENT) return
-            clearCommandWatch()
             if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                clearCommandWatch()
                 deliverCommandMessage(getString(R.string.voice_denied))
+                return
+            }
+            if (VoiceListen.pauseEnded(error) && silenceRestarts < VoiceListen.MAX_SILENCE_RESTARTS) {
+                val epoch = silenceEpoch
+                silenceRestarts += 1
+                voiceHandler.postDelayed(
+                    {
+                        if (token == commandToken && epoch == silenceEpoch) {
+                            beginCommandListen(token, armWatch = false)
+                        }
+                    },
+                    VoiceListen.SILENCE_RESTART_DELAY_MILLIS,
+                )
                 return
             }
             onCommandMiss(token)
@@ -371,10 +414,11 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
 
     private fun onCommandMiss(token: Int) {
         if (token != commandToken) return
+        silenceEpoch += 1
         clearCommandWatch()
         if (commandRetries > 0) {
             commandRetries -= 1
-            voiceHandler.postDelayed({ beginCommandListen(token) }, 350)
+            voiceHandler.postDelayed({ beginCommandListen(token, armWatch = true) }, 350)
         } else {
             deliverListen(false)
         }
@@ -410,6 +454,7 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ja-JP")
             putExtra(RecognizerIntent.EXTRA_PROMPT, getString(R.string.voice_prompt))
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putUnhurriedListen()
         }
         if (recognize.resolveActivity(packageManager) == null) {
             deliverVoiceError(getString(R.string.voice_unavailable))
