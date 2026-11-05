@@ -39,7 +39,10 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
+import com.nossam.smahobutton.logic.JoinedRead
+import com.nossam.smahobutton.logic.OcrLine
 import com.nossam.smahobutton.logic.ReadPass
+import com.nossam.smahobutton.logic.joinLines
 import com.nossam.smahobutton.logic.pickReadText
 
 /**
@@ -233,43 +236,58 @@ class RegionCapture(
             return
         }
         showReading()
-        val enlarged = RegionImages.upscale(crop)
-        if (enlarged !== crop) crop.recycle()
-        val gray = RegionImages.grayContrast(enlarged)
+        val base = RegionImages.prepareBase(crop)
+        if (base !== crop) crop.recycle()
+        val made = listOf(
+            base,
+            RegionImages.grayContrast(base),
+            RegionImages.equalize(base),
+            RegionImages.adaptiveBinary(base),
+            RegionImages.gammaBright(base),
+        )
         val recognizer = TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
-        recognizer.process(InputImage.fromBitmap(enlarged, 0))
-            .addOnSuccessListener { colorResult ->
-                recognizer.process(InputImage.fromBitmap(gray, 0))
-                    .addOnSuccessListener { grayResult ->
-                        recycleQuietly(enlarged, gray)
-                        recognizer.close()
-                        finishRead(
-                            pickReadText(
-                                ReadPass(colorResult.text, confidenceOf(colorResult)),
-                                ReadPass(grayResult.text, confidenceOf(grayResult)),
-                                textIn(rect),
-                            ),
-                            fallback = null,
-                        )
-                    }
-                    .addOnFailureListener {
-                        recycleQuietly(enlarged, gray)
-                        recognizer.close()
-                        finishRead(
-                            pickReadText(
-                                ReadPass(colorResult.text, confidenceOf(colorResult)),
-                                ReadPass("", 0f),
-                                textIn(rect),
-                            ),
-                            fallback = null,
-                        )
-                    }
+        val passes = ArrayList<ReadPass>()
+        fun finish() {
+            recognizer.close()
+            recycleQuietly(*made.toTypedArray())
+            finishRead(pickReadText(passes, textIn(rect)), fallback = null)
+        }
+        fun step(index: Int, rotation: Int) {
+            if (index >= made.size) {
+                finish()
+                return
             }
-            .addOnFailureListener {
-                recycleQuietly(enlarged, gray)
-                recognizer.close()
-                finishRead(null, textIn(rect))
+            val image = made[index]
+            recognizer.process(InputImage.fromBitmap(image, rotation))
+                .addOnSuccessListener { result ->
+                    passes += passFrom(result)
+                    if (rotation == 0) step(index, 90) else step(index + 1, 0)
+                }
+                .addOnFailureListener {
+                    if (rotation == 0) step(index, 90) else step(index + 1, 0)
+                }
+        }
+        step(0, 0)
+    }
+
+    private fun passFrom(result: Text): ReadPass {
+        val lines = ArrayList<OcrLine>()
+        for (block in result.textBlocks) {
+            for (line in block.lines) {
+                val box = line.boundingBox ?: continue
+                lines += OcrLine(
+                    text = line.text,
+                    left = box.left,
+                    top = box.top,
+                    right = box.right,
+                    bottom = box.bottom,
+                    confidence = line.confidence.coerceAtLeast(0f),
+                )
             }
+        }
+        val joined: JoinedRead = joinLines(lines)
+        val confidence = lines.sumOf { it.confidence.toDouble() }.toFloat()
+        return ReadPass(joined.text, confidence, joined.verticalColumns)
     }
 
     private fun finishRead(chosen: String?, fallback: String?) {
@@ -280,16 +298,6 @@ class RegionCapture(
             return
         }
         showEditor(text)
-    }
-
-    private fun confidenceOf(result: Text): Float {
-        var sum = 0f
-        for (block in result.textBlocks) {
-            for (line in block.lines) {
-                sum += line.confidence.coerceAtLeast(0f)
-            }
-        }
-        return sum
     }
 
     private fun recycleQuietly(vararg bitmaps: Bitmap) {

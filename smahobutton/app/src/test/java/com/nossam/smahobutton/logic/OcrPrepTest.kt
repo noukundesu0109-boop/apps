@@ -9,11 +9,34 @@ class OcrPrepTest {
     @Test
     fun smallCropsGrowUntilTheShortSideIsLarge() {
         assertEquals(2f, upscaleFactor(800, 1200))
-        assertEquals(3f, upscaleFactor(400, 700))
-        val tiny = upscaleFactor(80, 120)
-        assertTrue(tiny * 80 >= 960f)
-        assertTrue(tiny <= 12f)
+        assertEquals(4f, upscaleFactor(400, 700))
+        assertEquals(4f, upscaleFactor(80, 120))
+        assertEquals(1f, upscaleFactor(2000, 2400))
+        val wide = upscaleFactor(1000, 1400)
+        assertTrue(wide * 1000 >= 1200f)
+        assertTrue(wide <= 4f)
         assertTrue(upscaleFactor(3000, 4000) * 4000 <= 4096f)
+    }
+
+    @Test
+    fun linesReadTopToBottomAndVerticalColumnsStayTogether() {
+        val horizontal = joinLines(
+            listOf(
+                OcrLine("SAPPORO", 10, 100, 200, 140, 0.9f),
+                OcrLine("静岡工場謹製", 10, 40, 180, 80, 0.8f),
+                OcrLine("生", 200, 40, 240, 80, 0.7f),
+            ),
+        )
+        assertEquals("静岡工場謹製生\nSAPPORO", horizontal.text)
+        val vertical = joinLines(
+            listOf(
+                OcrLine("麦", 100, 110, 130, 160, 1f),
+                OcrLine("静", 100, 10, 130, 60, 1f),
+                OcrLine("岡", 102, 60, 132, 110, 1f),
+            ),
+        )
+        assertEquals("静岡麦", vertical.text)
+        assertEquals(1, vertical.verticalColumns)
     }
 
     @Test
