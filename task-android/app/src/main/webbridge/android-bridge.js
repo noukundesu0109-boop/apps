@@ -443,7 +443,7 @@
     var sheet = voiceBox(
       "<h2>声で入れる</h2>" +
       "<p class='spoken' id='task-voice-draft'>" + esc(text || "聞いています。ゆっくり話してください。") + "</p>" +
-      "<p class='hint'>言い終わったら「できた」を押してください。少し間を置いても大丈夫です。</p>" +
+      "<p class='hint'>言い終わったら「できた」と言うか、押してください。少し間を置いても大丈夫です。「やめる」でも止められます。</p>" +
       '<div class="listen on"><i></i><span>聞いています</span></div>' +
       '<div class="row"><button type="button" class="save" data-voice-done>できた</button>' +
       '<button type="button" data-voice-close>やめる</button></div>'
@@ -460,6 +460,10 @@
     var data = null;
     try { data = typeof raw === "string" ? JSON.parse(raw) : raw; } catch (e) { data = null; }
     if (!data) return;
+    if (data.cancel) {
+      discardVoiceSheet();
+      return;
+    }
     if (data.message) {
       showVoiceMessage(data.message);
       return;
@@ -715,4 +719,29 @@
       renderAhead();
     }).observe(appRoot, { childList: true, subtree: true });
   }
+
+  function keepFieldAboveKeyboard() {
+    var el = document.activeElement;
+    if (!el || !el.getBoundingClientRect) return;
+    var tag = (el.tagName || "").toLowerCase();
+    if (tag !== "input" && tag !== "textarea") return;
+    var type = (el.getAttribute("type") || "text").toLowerCase();
+    if (type === "checkbox" || type === "radio" || type === "button" || type === "range" || type === "file") return;
+    var view = window.visualViewport;
+    var top = view ? view.offsetTop : 0;
+    var bottom = view ? view.offsetTop + view.height : window.innerHeight;
+    var rect = el.getBoundingClientRect();
+    if (rect.bottom > bottom - 12 || rect.top < top + 8) {
+      try { el.scrollIntoView({ block: "center", inline: "nearest" }); }
+      catch (e) { el.scrollIntoView(false); }
+    }
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", keepFieldAboveKeyboard);
+    window.visualViewport.addEventListener("scroll", keepFieldAboveKeyboard);
+  }
+  document.addEventListener("focusin", function () {
+    setTimeout(keepFieldAboveKeyboard, 60);
+    setTimeout(keepFieldAboveKeyboard, 320);
+  });
 })();

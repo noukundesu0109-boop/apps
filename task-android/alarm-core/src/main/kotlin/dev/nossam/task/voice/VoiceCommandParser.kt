@@ -14,6 +14,14 @@ sealed class VoiceCommand {
     data object Unrecognized : VoiceCommand()
 }
 
+/** What a phrase means while a memo is still being dictated. */
+sealed class DictationCue {
+    /** Stop listening and open the confirmation screen with [memo] added. */
+    data class Finish(val memo: String) : DictationCue()
+    data object Cancel : DictationCue()
+    data class Memo(val text: String) : DictationCue()
+}
+
 /**
  * Reads a short reply on the confirmation screen.
  * 「保存して」 saves, 「時間は10時」 changes only the time, and other speech stays unrecognized.
@@ -28,6 +36,10 @@ object VoiceCommandParser {
     )
     private val cancelWords = setOf(
         "やめる", "やめて", "止める", "止めて", "キャンセル", "きゃんせる", "いらない", "要らない", "いらん",
+    )
+    private val doneWords = setOf(
+        "できた", "出来た", "できました", "出来ました",
+        "おわり", "終わり", "おしまい", "終わった", "おわった",
     )
     private val noneWords = setOf("なし", "無い", "ない", "無し", "無", "いらない", "要らない")
     private val timeClear = setOf(
@@ -63,6 +75,35 @@ object VoiceCommandParser {
         if (matches(text, retryWords)) return VoiceCommand.Retry
         if (matches(text, cancelWords)) return VoiceCommand.Cancel
         return VoiceCommand.Unrecognized
+    }
+
+    /**
+     * A memo stays a memo unless「できた」 or 「やめる」 is the whole phrase,
+     * or a separate phrase after a pause or punctuation.
+     * 「宿題ができた」 is still the memo.
+     */
+    fun dictationCue(raw: String): DictationCue {
+        var trimmed = raw.trim()
+        if (trimmed.isEmpty()) return DictationCue.Memo("")
+        while (trimmed.isNotEmpty() && isBreak(trimmed.last())) trimmed = trimmed.dropLast(1).trimEnd()
+        if (trimmed.isEmpty()) return DictationCue.Memo("")
+        val splitAt = (trimmed.indices).lastOrNull { isBreak(trimmed[it]) } ?: -1
+        val tailRaw = if (splitAt >= 0) trimmed.substring(splitAt + 1).trim() else trimmed
+        val head = if (splitAt >= 0) trimmed.substring(0, splitAt).trim() else ""
+        val tail = stripLead(normalize(tailRaw))
+        if (matches(tail, doneWords)) return DictationCue.Finish(if (fillerPhrase(head)) "" else head)
+        if (matches(tail, cancelWords)) return DictationCue.Cancel
+        return DictationCue.Memo(raw.trim())
+    }
+
+    private fun fillerPhrase(raw: String): Boolean {
+        var value = normalize(raw)
+        if (value.isEmpty()) return true
+        repeat(4) {
+            val lead = leads.filter { value.startsWith(it) }.maxByOrNull { it.length } ?: return value.isEmpty()
+            value = value.removePrefix(lead)
+        }
+        return value.isEmpty()
     }
 
     fun parseFirst(candidates: List<String>, now: ZonedDateTime): VoiceCommand {
@@ -129,6 +170,10 @@ object VoiceCommandParser {
         }
         return value
     }
+
+    private fun isBreak(ch: Char): Boolean = ch == ' ' || ch == '　' || ch == '\n' || ch == '\t' ||
+        ch == '、' || ch == '。' || ch == '！' || ch == '？' || ch == '!' || ch == '?' || ch == '・' || ch == '…' ||
+        ch == ',' || ch == '.'
 
     private fun normalize(raw: String): String {
         val mapped = buildString(raw.length) {

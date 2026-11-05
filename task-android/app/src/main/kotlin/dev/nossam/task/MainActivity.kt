@@ -40,6 +40,7 @@ import dev.nossam.task.drive.DriveMessages
 import dev.nossam.task.drive.DriveNotice
 import dev.nossam.task.drive.DrivePlan
 import dev.nossam.task.voice.VoiceCommand
+import dev.nossam.task.voice.DictationCue
 import dev.nossam.task.voice.VoiceCommandParser
 import dev.nossam.task.voice.VoiceListen
 import dev.nossam.task.voice.VoiceMemoParser
@@ -246,17 +247,7 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
 
     override fun finishDictation() {
         if (voiceMode != VoiceMode.DICTATE) return
-        val spoken = VoiceListen.mergeUtterance(dictated, dictatedPartial).trim()
-        dictateToken += 1
-        voiceMode = VoiceMode.NONE
-        dictated = ""
-        dictatedPartial = ""
-        cancelRecognizer()
-        if (spoken.isBlank()) {
-            deliverVoiceError(getString(R.string.voice_nomatch))
-        } else {
-            deliverHeard(spoken)
-        }
+        commitDictation(VoiceListen.mergeUtterance(dictated, dictatedPartial))
     }
 
     override fun listenForCommand() {
@@ -452,7 +443,12 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
             val heard = bestHeard(partialResults)
             if (heard.isBlank()) return
             dictatedPartial = heard
-            deliverDraft(VoiceListen.mergeUtterance(dictated, dictatedPartial))
+            val visible = when (val cue = VoiceCommandParser.dictationCue(heard)) {
+                DictationCue.Cancel -> dictated
+                is DictationCue.Finish -> VoiceListen.mergeUtterance(dictated, cue.memo)
+                is DictationCue.Memo -> VoiceListen.mergeUtterance(dictated, cue.text)
+            }
+            deliverDraft(visible.ifBlank { getString(R.string.voice_capture_wait) })
         }
 
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
@@ -545,11 +541,7 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         val token = dictateToken
         if (voiceMode != VoiceMode.DICTATE) return
         val heard = bestHeard(results).ifBlank { dictatedPartial }
-        if (heard.isNotBlank()) {
-            dictated = VoiceListen.mergeUtterance(dictated, heard)
-            dictatedPartial = ""
-            deliverDraft(dictated)
-        }
+        if (takeDictationCue(heard)) return
         voiceHandler.post { startDictationListen(token) }
     }
 
@@ -562,11 +554,7 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
             deliverVoiceError(getString(R.string.voice_denied))
             return
         }
-        if (dictatedPartial.isNotBlank()) {
-            dictated = VoiceListen.mergeUtterance(dictated, dictatedPartial)
-            dictatedPartial = ""
-            deliverDraft(dictated)
-        }
+        if (dictatedPartial.isNotBlank() && takeDictationCue(dictatedPartial)) return
         if (VoiceListen.pauseEnded(error) || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
             voiceHandler.postDelayed({ startDictationListen(token) }, VoiceListen.SILENCE_RESTART_DELAY_MILLIS)
             return
@@ -574,6 +562,50 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         voiceMode = VoiceMode.NONE
         cancelRecognizer()
         deliverVoiceError(getString(R.string.voice_unavailable))
+    }
+
+    /** @return true when this phrase ended dictation (done or cancel). */
+    private fun takeDictationCue(heard: String): Boolean {
+        if (voiceMode != VoiceMode.DICTATE) return true
+        return when (val cue = VoiceCommandParser.dictationCue(heard)) {
+            DictationCue.Cancel -> {
+                cancelDictation()
+                true
+            }
+            is DictationCue.Finish -> {
+                commitDictation(VoiceListen.mergeUtterance(dictated, cue.memo))
+                true
+            }
+            is DictationCue.Memo -> {
+                if (cue.text.isNotBlank()) {
+                    dictated = VoiceListen.mergeUtterance(dictated, cue.text)
+                    dictatedPartial = ""
+                    deliverDraft(dictated)
+                }
+                false
+            }
+        }
+    }
+
+    private fun commitDictation(spoken: String) {
+        if (voiceMode != VoiceMode.DICTATE) return
+        dictateToken += 1
+        voiceMode = VoiceMode.NONE
+        dictated = ""
+        dictatedPartial = ""
+        cancelRecognizer()
+        val text = spoken.trim()
+        if (text.isBlank()) {
+            deliverVoiceError(getString(R.string.voice_nomatch))
+        } else {
+            deliverHeard(text)
+        }
+    }
+
+    private fun cancelDictation() {
+        if (voiceMode != VoiceMode.DICTATE) return
+        stopVoice()
+        deliver("window.__taskVoiceDraft", JSONObject().put("cancel", true).toString())
     }
 
     private fun bestHeard(results: Bundle?): String {

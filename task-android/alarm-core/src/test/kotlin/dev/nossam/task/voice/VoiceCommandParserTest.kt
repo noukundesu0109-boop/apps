@@ -1,6 +1,7 @@
 package dev.nossam.task.voice
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 import java.time.LocalTime
@@ -57,6 +58,30 @@ class VoiceCommandParserTest {
         assertEquals(VoiceCommand.SetContent("歯医者"), VoiceCommandParser.parse("内容は歯医者", now))
         assertEquals(VoiceCommand.SetContent("歯医者の予約"), VoiceCommandParser.parse("内容は歯医者の予約です", now))
         assertEquals(VoiceCommand.SetContent("牛乳を買う"), VoiceCommandParser.parse("ないようは牛乳を買う", now))
+    }
+
+    @Test
+    fun sayingDoneDuringDictationOpensConfirmWithoutEatingTheMemo() {
+        assertEquals(DictationCue.Finish(""), VoiceCommandParser.dictationCue("できた"))
+        assertEquals(DictationCue.Finish(""), VoiceCommandParser.dictationCue("できたよ"))
+        assertEquals(DictationCue.Finish(""), VoiceCommandParser.dictationCue("できました"))
+        assertEquals(DictationCue.Finish(""), VoiceCommandParser.dictationCue("出来た"))
+        assertEquals(DictationCue.Finish(""), VoiceCommandParser.dictationCue("えーと、できた"))
+        assertEquals(DictationCue.Finish("病院"), VoiceCommandParser.dictationCue("病院 できた"))
+        assertEquals(DictationCue.Finish("病院 明日の3時"), VoiceCommandParser.dictationCue("病院 明日の3時、できたよ"))
+        assertEquals(DictationCue.Memo("宿題ができた"), VoiceCommandParser.dictationCue("宿題ができた"))
+        assertEquals(DictationCue.Memo("できたてパン"), VoiceCommandParser.dictationCue("できたてパン"))
+        assertEquals(VoiceCommand.Unrecognized, VoiceCommandParser.parse("できた", now))
+    }
+
+    @Test
+    fun sayingCancelDuringDictationStopsAndLeavesRealMemosAlone() {
+        listOf("やめる", "やめて", "キャンセル", "きゃんせる", "止めてください").forEach { phrase ->
+            assertEquals(phrase, DictationCue.Cancel, VoiceCommandParser.dictationCue(phrase))
+        }
+        assertEquals(DictationCue.Cancel, VoiceCommandParser.dictationCue("病院、やめる"))
+        assertEquals(DictationCue.Memo("薬をやめる"), VoiceCommandParser.dictationCue("薬をやめる"))
+        assertTrue(VoiceCommandParser.dictationCue("") is DictationCue.Memo)
     }
 
     @Test

@@ -10,6 +10,9 @@ import androidx.core.view.WindowInsetsCompat
  * Android 15 draws every screen edge-to-edge. Pad the content root, not the
  * WebView: WebView paints its page across its own padding, so a padded WebView
  * still starts at y=0 under the status bar.
+ *
+ * The keyboard is an inset too. Edge-to-edge ignores adjustResize, and
+ * consuming insets without the IME leaves the focused field underneath it.
  */
 internal fun ComponentActivity.prepareEdgeToEdge() {
     enableEdgeToEdge()
@@ -21,7 +24,8 @@ internal fun ComponentActivity.applySafeSystemBarPadding() {
         val bars = insets.getInsets(
             WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
         )
-        view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+        val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+        view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, imeBottom))
         WindowInsetsCompat.CONSUMED
     }
     ViewCompat.requestApplyInsets(content)
