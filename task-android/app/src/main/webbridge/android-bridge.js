@@ -399,10 +399,13 @@
   function listenForCommand() {
     try { if (window.TaskNative && TaskNative.listenForCommand) TaskNative.listenForCommand(); } catch (e) {}
   }
-  function removeVoiceSheet() {
-    stopCommandListen();
+  function discardVoiceSheet() {
     var old = document.getElementById("task-voice-sheet");
     if (old) old.remove();
+  }
+  function removeVoiceSheet() {
+    stopCommandListen();
+    discardVoiceSheet();
   }
   function setVoiceListening(on) {
     var sheet = document.getElementById("task-voice-sheet");
@@ -418,7 +421,7 @@
     if (when) when.textContent = describeWhen(date, time);
   }
   function voiceBox(html) {
-    removeVoiceSheet();
+    discardVoiceSheet();
     var sheet = document.createElement("div");
     sheet.id = "task-voice-sheet";
     sheet.innerHTML = '<div class="box" role="dialog" aria-modal="true">' + html + "</div>";
@@ -436,6 +439,37 @@
     if (date && !time) label += "（時刻なし）";
     return label || "日付なしのメモになります";
   }
+  function showVoiceCapture(text) {
+    var sheet = voiceBox(
+      "<h2>声で入れる</h2>" +
+      "<p class='spoken' id='task-voice-draft'>" + esc(text || "聞いています。ゆっくり話してください。") + "</p>" +
+      "<p class='hint'>言い終わったら「できた」を押してください。少し間を置いても大丈夫です。</p>" +
+      '<div class="listen on"><i></i><span>聞いています</span></div>' +
+      '<div class="row"><button type="button" class="save" data-voice-done>できた</button>' +
+      '<button type="button" data-voice-close>やめる</button></div>'
+    );
+    sheet.querySelector("[data-voice-done]").addEventListener("click", function () {
+      try { if (window.TaskNative && TaskNative.finishDictation) TaskNative.finishDictation(); } catch (e) {}
+    });
+    sheet.querySelector("[data-voice-close]").addEventListener("click", function () {
+      try { if (window.TaskNative && TaskNative.stopVoice) TaskNative.stopVoice(); } catch (e) {}
+      discardVoiceSheet();
+    });
+  }
+  window.__taskVoiceDraft = function (raw) {
+    var data = null;
+    try { data = typeof raw === "string" ? JSON.parse(raw) : raw; } catch (e) { data = null; }
+    if (!data) return;
+    if (data.message) {
+      showVoiceMessage(data.message);
+      return;
+    }
+    var sheet = document.getElementById("task-voice-sheet");
+    if (!sheet || !sheet.querySelector("[data-voice-done]")) showVoiceCapture(data.text);
+    sheet = document.getElementById("task-voice-sheet");
+    var draft = sheet && sheet.querySelector("#task-voice-draft");
+    if (draft) draft.textContent = data.text || "聞いています。ゆっくり話してください。";
+  };
   function showVoiceMessage(message) {
     var sheet = voiceBox(
       "<h2>声で入れる</h2><p class='spoken'>" + esc(message) + "</p>" +
@@ -470,7 +504,6 @@
       listenForCommand();
     });
     sheet.querySelector("[data-voice-close]").addEventListener("click", function () {
-      stopCommandListen();
       removeVoiceSheet();
     });
     sheet.querySelector("[data-voice-retry]").addEventListener("click", function () {

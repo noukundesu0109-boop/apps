@@ -25,6 +25,20 @@ object VoiceListen {
 
     fun pauseEnded(errorCode: Int): Boolean = errorCode == ERROR_SPEECH_TIMEOUT || errorCode == ERROR_NO_MATCH
 
+    /**
+     * Join a new heard piece onto text already kept.
+     * The engine sometimes repeats the whole phrase, and sometimes only the latest piece.
+     */
+    fun mergeUtterance(committed: String, segment: String): String {
+        val base = committed.trim()
+        val next = segment.trim()
+        if (next.isEmpty()) return base
+        if (base.isEmpty()) return next
+        if (next == base || base.endsWith(next)) return base
+        if (next.startsWith(base)) return next
+        return "$base $next"
+    }
+
     private const val ERROR_SPEECH_TIMEOUT = 6
     private const val ERROR_NO_MATCH = 7
 }

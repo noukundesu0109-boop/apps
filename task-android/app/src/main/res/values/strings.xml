@@ -19,6 +19,7 @@
     <string name="today_widget_empty">今日の予定はありません</string>
     <string name="today_widget_add">声でメモ</string>
     <string name="voice_prompt">予定を話してください</string>
+    <string name="voice_capture_wait">聞いています。ゆっくり話してください。</string>
     <string name="voice_command_prompt">保存、やり直し、やめる、と話せます</string>
     <string name="voice_denied">マイクが許可されていないので、声では入れられません。設定からマイクをオンにしてください</string>
     <string name="voice_unavailable">このスマホでは声の入力が使えません</string>

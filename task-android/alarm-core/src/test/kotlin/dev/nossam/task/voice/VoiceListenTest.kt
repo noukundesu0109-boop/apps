@@ -1,5 +1,6 @@
 package dev.nossam.task.voice
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -16,5 +17,14 @@ class VoiceListenTest {
         assertTrue(VoiceListen.pauseEnded(7))
         assertFalse(VoiceListen.pauseEnded(5))
         assertFalse(VoiceListen.pauseEnded(9))
+    }
+
+    @Test
+    fun laterPhrasesAccumulateWithoutRepeatingTheSameWords() {
+        assertEquals("病院", VoiceListen.mergeUtterance("", "病院"))
+        assertEquals("病院", VoiceListen.mergeUtterance("病院", "病院"))
+        assertEquals("病院 明日の3時", VoiceListen.mergeUtterance("病院", "明日の3時"))
+        assertEquals("病院 明日", VoiceListen.mergeUtterance("病院", "病院 明日"))
+        assertEquals("病院", VoiceListen.mergeUtterance("病院", "  "))
     }
 }

@@ -48,6 +48,8 @@ import java.io.File
 import java.time.ZonedDateTime
 import java.util.concurrent.atomic.AtomicBoolean
 
+private enum class VoiceMode { NONE, DICTATE, COMMAND }
+
 class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
     companion object {
         const val EXTRA_VOICE = "dev.nossam.task.extra.VOICE"
@@ -64,6 +66,10 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
     private var commandRetries = 0
     private var silenceRestarts = 0
     private var silenceEpoch = 0
+    private var dictateToken = 0
+    private var dictated = ""
+    private var dictatedPartial = ""
+    private var voiceMode = VoiceMode.NONE
     private var commandWatch: Runnable? = null
     private var speech: SpeechRecognizer? = null
     private var fileCallback: ValueCallback<Array<Uri>>? = null
@@ -77,10 +83,6 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
 
     private val driveConsent = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         onDriveConsent(result.resultCode, result.data)
-    }
-
-    private val voiceLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        onVoiceResult(result.resultCode, result.data)
     }
 
     private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -239,10 +241,27 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
 
     override fun startVoice() {
         stopVoice()
-        ensureMic(forCommand = false) { launchRecognizer() }
+        ensureMic(forCommand = false) { beginDictation() }
+    }
+
+    override fun finishDictation() {
+        if (voiceMode != VoiceMode.DICTATE) return
+        val spoken = VoiceListen.mergeUtterance(dictated, dictatedPartial).trim()
+        dictateToken += 1
+        voiceMode = VoiceMode.NONE
+        dictated = ""
+        dictatedPartial = ""
+        cancelRecognizer()
+        if (spoken.isBlank()) {
+            deliverVoiceError(getString(R.string.voice_nomatch))
+        } else {
+            deliverHeard(spoken)
+        }
     }
 
     override fun listenForCommand() {
+        dictateToken += 1
+        voiceMode = VoiceMode.COMMAND
         ensureMic(forCommand = true) {
             commandToken += 1
             commandRetries = 1
@@ -256,6 +275,8 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         commandRetries = 0
         silenceRestarts = 0
         silenceEpoch += 1
+        dictateToken += 1
+        voiceMode = VoiceMode.NONE
         voiceHandler.removeCallbacksAndMessages(null)
         cancelRecognizer()
         deliverListen(false)
@@ -343,6 +364,64 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         }
     }
 
+    private fun dictateIntent(): Intent {
+        return Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ja-JP")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ja-JP")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putUnhurriedListen()
+        }
+    }
+
+    private fun beginDictation() {
+        dictateToken += 1
+        val token = dictateToken
+        dictated = ""
+        dictatedPartial = ""
+        voiceMode = VoiceMode.DICTATE
+        if (!SpeechRecognizer.isRecognitionAvailable(this) || speechRecognizer() == null) {
+            voiceMode = VoiceMode.NONE
+            deliverVoiceError(getString(R.string.voice_unavailable))
+            return
+        }
+        deliverDraft(getString(R.string.voice_capture_wait))
+        startDictationListen(token)
+    }
+
+    private fun startDictationListen(token: Int) {
+        if (token != dictateToken || voiceMode != VoiceMode.DICTATE) return
+        val recognizer = speechRecognizer() ?: return
+        try {
+            recognizer.cancel()
+        } catch (_: Throwable) {
+        }
+        try {
+            recognizer.startListening(dictateIntent())
+        } catch (_: Throwable) {
+            voiceMode = VoiceMode.NONE
+            deliverVoiceError(getString(R.string.voice_unavailable))
+        }
+    }
+
+    private fun deliverDraft(text: String) {
+        val json = JSONObject().put("text", text).toString()
+        deliver("window.__taskVoiceDraft", json)
+    }
+
+    private fun deliverHeard(spoken: String) {
+        val parsed = VoiceMemoParser.parse(spoken, ZonedDateTime.now(VoiceMemoParser.ZONE))
+        val json = JSONObject()
+            .put("ok", true)
+            .put("spoken", spoken)
+            .put("text", parsed.content)
+            .put("date", parsed.date?.toString() ?: JSONObject.NULL)
+            .put("time", parsed.time?.let { "%02d:%02d".format(it.hour, it.minute) } ?: JSONObject.NULL)
+            .toString()
+        deliver("window.__taskVoiceHeard", json)
+    }
+
     private fun speechRecognizer(): SpeechRecognizer? {
         speech?.let { return it }
         return try {
@@ -368,12 +447,23 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         override fun onRmsChanged(rmsdB: Float) = Unit
         override fun onBufferReceived(buffer: ByteArray?) = Unit
         override fun onEndOfSpeech() = Unit
-        override fun onPartialResults(partialResults: Bundle?) = Unit
+        override fun onPartialResults(partialResults: Bundle?) {
+            if (voiceMode != VoiceMode.DICTATE) return
+            val heard = bestHeard(partialResults)
+            if (heard.isBlank()) return
+            dictatedPartial = heard
+            deliverDraft(VoiceListen.mergeUtterance(dictated, dictatedPartial))
+        }
+
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
 
         override fun onResults(results: Bundle?) {
+            if (voiceMode == VoiceMode.DICTATE) {
+                onDictateResults(results)
+                return
+            }
             val token = activeCommandToken
-            if (token != commandToken) return
+            if (token != commandToken || voiceMode != VoiceMode.COMMAND) return
             clearCommandWatch()
             val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
             val command = VoiceCommandParser.parseFirst(heard, ZonedDateTime.now(VoiceMemoParser.ZONE))
@@ -387,8 +477,12 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         }
 
         override fun onError(error: Int) {
+            if (voiceMode == VoiceMode.DICTATE) {
+                onDictateError(error)
+                return
+            }
             val token = activeCommandToken
-            if (token != commandToken) return
+            if (token != commandToken || voiceMode != VoiceMode.COMMAND) return
             if (error == SpeechRecognizer.ERROR_CLIENT) return
             if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
                 clearCommandWatch()
@@ -447,42 +541,45 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         deliver("window.__taskVoiceCommand", json)
     }
 
-    private fun launchRecognizer() {
-        val recognize = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ja-JP")
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ja-JP")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, getString(R.string.voice_prompt))
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-            putUnhurriedListen()
+    private fun onDictateResults(results: Bundle?) {
+        val token = dictateToken
+        if (voiceMode != VoiceMode.DICTATE) return
+        val heard = bestHeard(results).ifBlank { dictatedPartial }
+        if (heard.isNotBlank()) {
+            dictated = VoiceListen.mergeUtterance(dictated, heard)
+            dictatedPartial = ""
+            deliverDraft(dictated)
         }
-        if (recognize.resolveActivity(packageManager) == null) {
-            deliverVoiceError(getString(R.string.voice_unavailable))
-            return
-        }
-        try {
-            voiceLauncher.launch(recognize)
-        } catch (_: ActivityNotFoundException) {
-            deliverVoiceError(getString(R.string.voice_unavailable))
-        }
+        voiceHandler.post { startDictationListen(token) }
     }
 
-    private fun onVoiceResult(resultCode: Int, data: Intent?) {
-        if (resultCode == RESULT_CANCELED) return
-        val spoken = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull { it.isNotBlank() }
-        if (resultCode != RESULT_OK || spoken.isNullOrBlank()) {
-            deliverVoiceError(getString(R.string.voice_nomatch))
+    private fun onDictateError(error: Int) {
+        val token = dictateToken
+        if (voiceMode != VoiceMode.DICTATE || token != dictateToken) return
+        if (error == SpeechRecognizer.ERROR_CLIENT) return
+        if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+            voiceMode = VoiceMode.NONE
+            deliverVoiceError(getString(R.string.voice_denied))
             return
         }
-        val parsed = VoiceMemoParser.parse(spoken, ZonedDateTime.now(VoiceMemoParser.ZONE))
-        val json = JSONObject()
-            .put("ok", true)
-            .put("spoken", spoken)
-            .put("text", parsed.content)
-            .put("date", parsed.date?.toString() ?: JSONObject.NULL)
-            .put("time", parsed.time?.let { "%02d:%02d".format(it.hour, it.minute) } ?: JSONObject.NULL)
-            .toString()
-        deliver("window.__taskVoiceHeard", json)
+        if (dictatedPartial.isNotBlank()) {
+            dictated = VoiceListen.mergeUtterance(dictated, dictatedPartial)
+            dictatedPartial = ""
+            deliverDraft(dictated)
+        }
+        if (VoiceListen.pauseEnded(error) || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) {
+            voiceHandler.postDelayed({ startDictationListen(token) }, VoiceListen.SILENCE_RESTART_DELAY_MILLIS)
+            return
+        }
+        voiceMode = VoiceMode.NONE
+        cancelRecognizer()
+        deliverVoiceError(getString(R.string.voice_unavailable))
+    }
+
+    private fun bestHeard(results: Bundle?): String {
+        return results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            ?.firstOrNull { it.isNotBlank() }
+            .orEmpty()
     }
 
     private fun deliverVoiceError(message: String) {

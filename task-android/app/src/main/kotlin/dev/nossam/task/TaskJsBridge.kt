@@ -15,6 +15,7 @@ class TaskJsBridge(
         fun restoreFromDrive(phase: String)
         fun openPermissions()
         fun startVoice()
+        fun finishDictation()
         fun listenForCommand()
         fun stopVoice()
     }
@@ -52,6 +53,11 @@ class TaskJsBridge(
     @JavascriptInterface
     fun startVoice() {
         main.post { ui.startVoice() }
+    }
+
+    @JavascriptInterface
+    fun finishDictation() {
+        main.post { ui.finishDictation() }
     }
 
     @JavascriptInterface
