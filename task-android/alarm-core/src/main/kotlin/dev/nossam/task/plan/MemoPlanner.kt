@@ -226,6 +226,10 @@ object MemoPlanner {
         )
     }
 
+    /** Today's unfinished items, timed ones first. Done items are left out. */
+    fun openItemsOn(board: TaskBoard, iso: String): List<DayItem> =
+        itemsOn(board, iso).filter { !it.done }
+
     /**
      * Full-screen alarms. Memos ring by default. Other tabs ring only when that
      * tab is switched on and the item has a time. The date is the postponed one

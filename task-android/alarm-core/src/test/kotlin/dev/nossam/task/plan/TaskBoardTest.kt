@@ -287,6 +287,16 @@ class TaskBoardTest {
         assertEquals(null, gear.bousai[0].due)
     }
 
+    @Test
+    fun openItemsOnKeepsTodaysUnfinishedPlansTimedFirst() {
+        val open = MemoPlanner.openItemsOn(sample(), "2026-11-06")
+        assertEquals(listOf("朝", "午後"), open.take(2).map { it.title })
+        assertTrue(open.none { it.title == "完了" || it.title == "別の日" })
+        assertTrue(open.any { it.title == "居間 床" && it.time == null })
+        assertTrue(open.any { it.title == "日付だけ" && it.time == null })
+        assertTrue(open.indexOfFirst { it.time == null } > open.indexOfFirst { it.time != null })
+    }
+
     private fun sample(): TaskBoard = TaskBoard(
         memos = listOf(
             MemoEntry("m1", "午後", "2026-11-06", "15:00", done = false),

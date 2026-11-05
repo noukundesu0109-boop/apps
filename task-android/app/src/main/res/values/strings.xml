@@ -14,6 +14,10 @@
     <string name="ahead_title">まもなく</string>
     <string name="voice_label">声でメモ</string>
     <string name="voice_widget_desc">話して予定を入れます</string>
+    <string name="today_widget_label">今日の予定</string>
+    <string name="today_widget_desc">今日の予定を一覧し、チェックで済みにします</string>
+    <string name="today_widget_empty">今日の予定はありません</string>
+    <string name="today_widget_add">声でメモ</string>
     <string name="voice_prompt">予定を話してください</string>
     <string name="voice_command_prompt">保存、やり直し、やめる、と話せます</string>
     <string name="voice_denied">マイクが許可されていないので、声では入れられません。設定からマイクをオンにしてください</string>

@@ -273,6 +273,7 @@ internal object TaskAlarms {
         store.writeCodes(codes)
         NextTaskNotice.update(context, if (board.nextTaskNotice) MemoPlanner.nextToday(board, now) else null)
         quietStaleRing(context, board)
+        TodayWidget.updateAll(context)
         Log.i(TAG, "scheduled ${planned.size} alarms exact=$exact summary=${summaryAt.toLocalTime()}")
         return plannedMemosToJson(planned)
     }
