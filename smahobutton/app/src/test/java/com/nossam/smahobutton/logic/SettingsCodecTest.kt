@@ -182,6 +182,28 @@ class SettingsCodecTest {
     }
 
     @Test
+    fun powerMenuActionSurvivesBackup() {
+        val spec = SettingsSpec(
+            buttons = listOf(
+                ButtonSpec(
+                    tap = ActionSpec(TYPE_POWER_DIALOG),
+                    doubleTap = ActionSpec(TYPE_POWER_DIALOG),
+                    longPress = ActionSpec(TYPE_POWER_DIALOG),
+                    menu = listOf(ActionSpec(TYPE_POWER_DIALOG)),
+                ),
+            ),
+        )
+        val restored = SettingsJson.decode(SettingsJson.encode(spec))
+        val button = restored.buttons.single()
+        assertEquals(TYPE_POWER_DIALOG, button.tap.type)
+        assertEquals(TYPE_POWER_DIALOG, button.doubleTap.type)
+        assertEquals(TYPE_POWER_DIALOG, button.longPress.type)
+        assertEquals(TYPE_POWER_DIALOG, button.menu.single().type)
+        assertEquals("電源メニューを開く", actionTitle(button.tap))
+        assertEquals("電源", actionShort(button.tap))
+    }
+
+    @Test
     fun menuIsCappedAtSix() {
         val menu = List(8) { ActionSpec(TYPE_HOME) }
         val spec = normalize(SettingsSpec(buttons = listOf(ButtonSpec(menu = menu))))

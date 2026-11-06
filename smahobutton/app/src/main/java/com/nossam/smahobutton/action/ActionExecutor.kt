@@ -18,6 +18,7 @@ import com.nossam.smahobutton.logic.TYPE_LOCK
 import com.nossam.smahobutton.logic.TYPE_NONE
 import com.nossam.smahobutton.logic.TYPE_NOTIFICATIONS
 import com.nossam.smahobutton.logic.TYPE_OPEN_APP
+import com.nossam.smahobutton.logic.TYPE_POWER_DIALOG
 import com.nossam.smahobutton.logic.TYPE_RECENTS
 import com.nossam.smahobutton.logic.TYPE_REGION
 import com.nossam.smahobutton.logic.TYPE_REMEMBER_VOLUME
@@ -59,6 +60,7 @@ class ActionExecutor(private val app: SmahoApp) {
             TYPE_RECENTS -> global(AccessibilityService.GLOBAL_ACTION_RECENTS, "最近のアプリを出せませんでした")
             TYPE_NOTIFICATIONS -> global(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS, "通知を出せませんでした")
             TYPE_LOCK -> global(AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN, "画面をロックできませんでした")
+            TYPE_POWER_DIALOG -> global(AccessibilityService.GLOBAL_ACTION_POWER_DIALOG, "電源メニューを出せませんでした")
             TYPE_REMEMBER_VOLUME -> remember()
             TYPE_SHUTTER -> SmahoRuntime.cameraShutter()
             TYPE_TASK_VOICE -> openTaskVoice()

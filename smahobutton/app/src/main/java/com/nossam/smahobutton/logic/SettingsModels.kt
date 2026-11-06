@@ -124,6 +124,7 @@ const val TYPE_HOME = "home"
 const val TYPE_RECENTS = "recents"
 const val TYPE_NOTIFICATIONS = "notifications"
 const val TYPE_LOCK = "lock"
+const val TYPE_POWER_DIALOG = "power_dialog"
 const val TYPE_REMEMBER_VOLUME = "remember_volume"
 const val TYPE_SHUTTER = "shutter"
 const val TYPE_TASK_VOICE = "task_voice"
@@ -143,6 +144,7 @@ val ACTION_CHOICES = listOf(
     ActionChoice(TYPE_RECENTS, "最近のアプリ"),
     ActionChoice(TYPE_NOTIFICATIONS, "通知を出す"),
     ActionChoice(TYPE_LOCK, "画面ロック"),
+    ActionChoice(TYPE_POWER_DIALOG, "電源メニューを開く"),
     ActionChoice(TYPE_REMEMBER_VOLUME, "この画面の音量を覚える"),
     ActionChoice(TYPE_SHUTTER, "カメラのシャッター"),
     ActionChoice(TYPE_TASK_VOICE, "タスクに声で予定を入れる"),
@@ -214,6 +216,7 @@ fun actionShort(action: ActionSpec): String = when (action.type) {
     TYPE_RECENTS -> "履歴"
     TYPE_NOTIFICATIONS -> "通知"
     TYPE_LOCK -> "ロック"
+    TYPE_POWER_DIALOG -> "電源"
     TYPE_REMEMBER_VOLUME -> "覚える"
     TYPE_SHUTTER -> "カメラ"
     TYPE_TASK_VOICE -> "声で予定"
