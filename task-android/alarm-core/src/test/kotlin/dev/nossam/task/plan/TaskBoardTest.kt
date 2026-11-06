@@ -133,6 +133,29 @@ class TaskBoardTest {
     }
 
     @Test
+    fun dailyTabFollowsCustomTabsAndStaysQuietUntilSwitchedOn() {
+        val board = parseBoard(
+            """
+            {"memos":[],"cleaning":[],"bousai":[],
+             "tabs":[
+               {"id":"car","kind":"car","name":"車","items":[]},
+               {"id":"nichijo","kind":"custom","name":"日常","items":[
+                 {"id":"d1","name":"換気扇","done":"2026-10-06","months":1,"time":"09:00","memo":""}
+               ]}
+             ]}
+            """.trimIndent(),
+        )
+        assertEquals("日常", board.extras.single().tabName)
+        assertEquals("nichijo", board.extras.single().tabId)
+        assertEquals(setOf("x:nichijo"), MemoPlanner.marks(board)["2026-11-06"])
+        assertEquals(listOf("換気扇"), MemoPlanner.itemsOn(board, "2026-11-06").map { it.title })
+        assertEquals("09:00 日常 換気扇", MemoPlanner.dailySummary(board, "2026-11-06")!!.body)
+        assertEquals(emptyList<String>(), MemoPlanner.planAlerts(board, noon("2026-11-02")).map { it.title })
+        val ringing = board.copy(rings = mapOf("nichijo" to true))
+        assertEquals(listOf("換気扇"), MemoPlanner.planAlerts(ringing, noon("2026-11-02")).map { it.title })
+    }
+
+    @Test
     fun customTabsAreMarkedAndTheMorningSummaryIncludesThem() {
         val board = TaskBoard(
             extras = listOf(ExtraEntry("shop", "買い物", "i1", "電池", "2026-10-18", 1, shift = "2026-11-20")),

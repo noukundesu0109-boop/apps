@@ -13,8 +13,8 @@ android {
         applicationId = "dev.nossam.task"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "1.4.7"
+        versionCode = 16
+        versionName = "1.4.8"
     }
 
     buildTypes {
