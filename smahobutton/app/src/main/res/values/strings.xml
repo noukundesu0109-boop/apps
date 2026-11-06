@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">スマホボタン</string>
+    <string name="a11y_description">画面の上に丸いボタンを出します。戻る、ホーム、スクリーンショット、アプリごとの音量に使います。</string>
+    <string name="channel_name">ボタンの表示</string>
+    <string name="channel_desc">ボタンを出しているあいだ、ここに静かな通知が残ります。</string>
+    <string name="notif_title">スマホボタン</string>
+    <string name="notif_text">ボタンを表示しています</string>
+</resources>
