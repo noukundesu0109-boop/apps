@@ -12,6 +12,8 @@
     <string name="ahead_channel">事前通知</string>
     <string name="ahead_channel_desc">予定の少し前に知らせます</string>
     <string name="ahead_title">まもなく</string>
+    <string name="quiet_channel_name">音なしの予定</string>
+    <string name="quiet_channel_desc">音をオフにした日常の予定を、音なしで知らせます</string>
     <string name="voice_label">声でメモ</string>
     <string name="voice_widget_desc">話して予定を入れます</string>
     <string name="today_widget_label">今日の予定</string>

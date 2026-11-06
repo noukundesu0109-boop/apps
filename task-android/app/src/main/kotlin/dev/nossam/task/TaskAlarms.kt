@@ -176,6 +176,35 @@ internal object TaskAlarms {
         }
     }
 
+    fun showQuiet(context: Context, title: String, detail: String, itemId: String) {
+        val app = context.applicationContext
+        if (!PermissionGate.notificationsOk(app)) return
+        ensureQuietChannel(app)
+        val open = PendingIntent.getActivity(
+            app,
+            12,
+            Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = NotificationCompat.Builder(app, AlarmIntents.QUIET_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_alarm)
+            .setContentTitle(title.ifBlank { "予定" })
+            .setContentText(detail)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setSilent(true)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .build()
+        val id = AlarmIntents.QUIET_NOTIFICATION_BASE + (itemId.hashCode() and 0x0FFF)
+        try {
+            app.getSystemService(NotificationManager::class.java)?.notify(id, notification)
+        } catch (error: SecurityException) {
+            Log.w(TAG, "quiet notice was rejected", error)
+        }
+    }
+
     fun showSummary(context: Context, dateIso: String?) {
         synchronized(lock) {
             val app = context.applicationContext
@@ -335,6 +364,7 @@ internal object TaskAlarms {
             putExtra(AlarmIntents.EXTRA_TAB, alarm.tabId)
             putExtra(AlarmIntents.EXTRA_DATE, alarm.sourceDate.ifBlank { alarm.date })
             putExtra(AlarmIntents.EXTRA_TIME, alarm.sourceTime.ifBlank { alarm.time })
+            putExtra(AlarmIntents.EXTRA_SILENT, alarm.silent)
         }
         val operation = PendingIntent.getBroadcast(
             context,
@@ -349,8 +379,10 @@ internal object TaskAlarms {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         try {
-            if (exact) {
+            if (exact && !alarm.silent) {
                 manager.setAlarmClock(AlarmManager.AlarmClockInfo(alarm.triggerAtMillis, show), operation)
+            } else if (exact) {
+                manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.triggerAtMillis, operation)
             } else {
                 manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarm.triggerAtMillis, operation)
             }

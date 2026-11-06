@@ -13,8 +13,8 @@ android {
         applicationId = "dev.nossam.task"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "1.4.8"
+        versionCode = 17
+        versionName = "1.4.9"
     }
 
     buildTypes {
@@ -164,12 +164,7 @@ fun patchIndex(html: String): String {
     text = replaceOne(
         text,
         """(0,l.useEffect)(()=>{try{localStorage.setItem(Ze,JSON.stringify(n))}catch{}},[n])""",
-        """(0,l.useEffect)(()=>{try{localStorage.setItem(Ze,JSON.stringify(n))}catch(e){}try{window.__taskGet=function(){return n};window.__taskSet=r;window.__taskSetTab=a;window.__taskOpen=v;window.__taskShift=function(kind,id,tabId,date){let s=/^\d{4}-\d{2}-\d{2}$/.test(date)?date:null;if(kind===`c`||kind===`clean`)ce(id,{shift:s});else if(kind===`b`||kind===`bousai`)ue(id,{shift:s});else if(tabId)me(tabId,id,{shift:s})};window.__taskSetRing=function(id,on){r(function(s){let rings=Object.assign({memo:!0},s.rings||{});rings[id]=!!on;return Object.assign({},s,{rings:rings})})};window.__taskAddMemo=function(text,due,time){let body=String(text||``).trim();if(!body)return!1;let day=/^\d{4}-\d{2}-\d{2}$/.test(String(due||``))?due:null;let clock=/^\d{2}:\d{2}$/.test(String(time||``))?time:``;try{a(`memo`)}catch(err){}D(body,day,!1,clock,null);return!0};window.__taskMarkDone=function(raw){let e=typeof raw==`string`?JSON.parse(raw):raw;if(!e||!e.id)return!1;let today=et(),ok=!1;if(e.kind===`memo`){Se(n=>n.map(m=>m.id===e.id?{...m,done:m.done||today}:m));ok=!0}else if(e.kind===`clean`){ce(e.id,{done:today,shift:null});ok=!0}else if(e.kind===`bousai`){ue(e.id,{due:null,shift:null});ok=!0}else if(e.tabId){me(e.tabId,e.id,{done:today,shift:null});ok=!0}if(ok){try{window.TaskNative&&TaskNative.ackDone(e.kind,e.id)}catch(err){}}return ok};window.__taskSetLead=function(min){let n=Number(min);r(function(s){return Object.assign({},s,{leadMinutes:[0,5,10,15,30,60].includes(n)?n:10})})};window.__taskSetNextNotice=function(on){r(function(s){return Object.assign({},s,{nextTaskNotice:!!on})})};window.__taskSetDoneOnStop=function(on){r(function(s){return Object.assign({},s,{doneOnStop:!!on})})}}catch(e){}try{window.TaskNative&&window.TaskNative.onState(JSON.stringify(n))}catch(e){}try{window.__taskOnData&&window.__taskOnData(n)}catch(e){}},[n])""",
-    )
-    text = replaceOne(
-        text,
-        """function vt(e,t){return{id:String(e?.id??`i${'$'}{t}-${'$'}{Date.now()}`),name:String(e?.name??``),done:ht(e?.done),doneKm:gt(e?.doneKm),months:_t(e?.months),km:_t(e?.km),memo:String(e?.memo??``)}}""",
-        """function vt(e,t){return{id:String(e?.id??`i${'$'}{t}-${'$'}{Date.now()}`),name:String(e?.name??``),done:ht(e?.done),doneKm:gt(e?.doneKm),months:_t(e?.months),km:_t(e?.km),memo:String(e?.memo??``),time:/^\d{2}:\d{2}$/.test(e?.time)?e.time:null,shift:ht(e?.shift)}}""",
+        """(0,l.useEffect)(()=>{try{localStorage.setItem(Ze,JSON.stringify(n))}catch(e){}try{window.__taskGet=function(){return n};window.__taskSet=r;window.__taskSetTab=a;window.__taskOpen=v;window.__taskShift=function(kind,id,tabId,date){let s=/^\d{4}-\d{2}-\d{2}$/.test(date)?date:null;if(kind===`c`||kind===`clean`)ce(id,{shift:s});else if(kind===`b`||kind===`bousai`)ue(id,{shift:s});else if(tabId)me(tabId,id,{shift:s})};window.__taskSetRing=function(id,on){r(function(s){let rings=Object.assign({memo:!0},s.rings||{});rings[id]=!!on;return Object.assign({},s,{rings:rings})})};window.__taskAddMemo=function(text,due,time){let body=String(text||``).trim();if(!body)return!1;let day=/^\d{4}-\d{2}-\d{2}$/.test(String(due||``))?due:null;let clock=/^\d{2}:\d{2}$/.test(String(time||``))?time:``;try{a(`memo`)}catch(err){}D(body,day,!1,clock,null);return!0};window.__taskMarkDone=function(raw){let e=typeof raw==`string`?JSON.parse(raw):raw;if(!e||!e.id)return!1;let today=et(),ok=!1;if(e.kind===`memo`){Se(n=>n.map(m=>m.id===e.id?{...m,done:m.done||today}:m));ok=!0}else if(e.kind===`clean`){ce(e.id,{done:today,shift:null});ok=!0}else if(e.kind===`bousai`){ue(e.id,{due:null,shift:null});ok=!0}else if(e.tabId){let tab=(n.tabs||[]).find(t=>t.id===e.tabId),item=tab&&(tab.items||[]).find(t=>t.id===e.id),patch={done:today,shift:null};if(item&&(tab.id===`nichijo`||tab.name===`日常`||item.repeat)){let next=advanceDaily(item,today);patch.due=next.due;patch.series=next.series}me(e.tabId,e.id,patch);ok=!0}if(ok){try{window.TaskNative&&TaskNative.ackDone(e.kind,e.id)}catch(err){}}return ok};window.__taskSetLead=function(min){let n=Number(min);r(function(s){return Object.assign({},s,{leadMinutes:[0,5,10,15,30,60].includes(n)?n:10})})};window.__taskSetNextNotice=function(on){r(function(s){return Object.assign({},s,{nextTaskNotice:!!on})})};window.__taskSetDoneOnStop=function(on){r(function(s){return Object.assign({},s,{doneOnStop:!!on})})}}catch(e){}try{window.TaskNative&&window.TaskNative.onState(JSON.stringify(n))}catch(e){}try{window.__taskOnData&&window.__taskOnData(n)}catch(e){}},[n])""",
     )
     text = replaceOne(
         text,
@@ -180,11 +175,6 @@ fun patchIndex(html: String): String {
         text,
         """ve=e=>{let t=e.done;ce(e.id,{done:o}),ge(`「${'$'}{e.place} ${'$'}{e.task}」をやった日=今日にしました`,()=>ce(e.id,{done:t}))}""",
         """ve=e=>{let t=e.done,sh=e.shift??null;ce(e.id,{done:o,shift:null}),ge(`「${'$'}{e.place} ${'$'}{e.task}」をやった日=今日にしました`,()=>ce(e.id,{done:t,shift:sh}))}""",
-    )
-    text = replaceOne(
-        text,
-        """be=(e,t)=>{let n={done:t.done,doneKm:t.doneKm},r={done:o,doneKm:e.odometer??(e.kind===`car`?null:t.doneKm)};me(e.id,t.id,r);""",
-        """be=(e,t)=>{let n={done:t.done,doneKm:t.doneKm,shift:t.shift??null},r={done:o,doneKm:e.odometer??(e.kind===`car`?null:t.doneKm),shift:null};me(e.id,t.id,r);""",
     )
     text = replaceOne(
         text,
@@ -205,16 +195,6 @@ fun patchIndex(html: String): String {
         text,
         """(0,A.jsx)(M,{onClick:r,className:`shrink-0 px-2.5`,"aria-label":e===`c`?`やった`:`入れ替えた`,children:""",
         """base?(0,A.jsxs)(`div`,{className:`flex shrink-0 flex-col items-end gap-1`,children:[ht(t.shift)?(0,A.jsxs)(`span`,{className:`text-[11px] text-gold`,"data-shifted":!0,children:[Number(String(t.shift).slice(5,7)),`/`,Number(String(t.shift).slice(8)),`にずらし中`]}):null,ht(t.shift)?(0,A.jsx)(`button`,{type:`button`,className:`text-[12px] font-medium text-forest`,onClick:()=>window.__taskShift&&window.__taskShift(e,t.id,null,null),children:`元に戻す`}):(0,A.jsxs)(`label`,{className:`text-[12px] text-muted`,children:[`ずらす`,(0,A.jsx)(`input`,{type:`date`,"aria-label":`ずらす日`,className:`mt-1 block w-28 rounded border border-line bg-card px-1 py-0.5 text-[12px]`,onChange:ev=>window.__taskShift&&window.__taskShift(e,t.id,null,ev.target.value||null)})]})]}):null,(0,A.jsx)(M,{onClick:r,className:`shrink-0 px-2.5`,"aria-label":e===`c`?`やった`:`入れ替えた`,children:""",
-    )
-    text = replaceOne(
-        text,
-        """function Ht({item:e,tab:t,today:n,onAction:r,onEdit:i,tabName:a}){let o=Pt(e,t,n),s=o.st,""",
-        """function Ht({item:e,tab:t,today:n,onAction:r,onEdit:i,tabName:a}){let baseDue=Pt(e,t,n).due,o=Pt(e,t,n);if(ht(e.shift)&&baseDue){let left=at(e.shift,n);o={...o,due:e.shift,leftD:left,st:ot(left)}}let s=o.st,""",
-    )
-    text = replaceOne(
-        text,
-        """(0,A.jsx)(M,{onClick:r,className:`shrink-0 px-2.5`,"aria-label":t.kind===`car`?`交換した`:`やった`,children:""",
-        """baseDue?(0,A.jsxs)(`div`,{className:`flex shrink-0 flex-col items-end gap-1`,children:[ht(e.shift)?(0,A.jsxs)(`span`,{className:`text-[11px] text-gold`,"data-shifted":!0,children:[Number(String(e.shift).slice(5,7)),`/`,Number(String(e.shift).slice(8)),`にずらし中`]}):null,ht(e.shift)?(0,A.jsx)(`button`,{type:`button`,className:`text-[12px] font-medium text-forest`,onClick:()=>window.__taskShift&&window.__taskShift(`t`,e.id,t.id,null),children:`元に戻す`}):(0,A.jsxs)(`label`,{className:`text-[12px] text-muted`,children:[`ずらす`,(0,A.jsx)(`input`,{type:`date`,"aria-label":`ずらす日`,className:`mt-1 block w-28 rounded border border-line bg-card px-1 py-0.5 text-[12px]`,onChange:ev=>window.__taskShift&&window.__taskShift(`t`,e.id,t.id,ev.target.value||null)})]})]}):null,(0,A.jsx)(M,{onClick:r,className:`shrink-0 px-2.5`,"aria-label":t.kind===`car`?`交換した`:`やった`,children:""",
     )
     text = replaceOne(
         text,

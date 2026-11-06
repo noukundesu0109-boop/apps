@@ -22,13 +22,16 @@ internal object AlarmIntents {
     const val EXTRA_ITEM = "item"
     const val EXTRA_TAB = "tab"
     const val EXTRA_LEAD = "lead"
+    const val EXTRA_SILENT = "silent"
     const val CHANNEL_ID = "task-alarms"
     const val SUMMARY_CHANNEL_ID = "task-summary"
     const val NEXT_CHANNEL_ID = "task-next"
     const val LEAD_CHANNEL_ID = "task-ahead"
+    const val QUIET_CHANNEL_ID = "task-quiet"
     const val NOTIFICATION_ID = 4101
     const val SUMMARY_NOTIFICATION_ID = 4102
     const val NEXT_NOTIFICATION_ID = 4103
     const val LEAD_NOTIFICATION_ID = 4104
+    const val QUIET_NOTIFICATION_BASE = 4200
     const val NEXT_DONE_REQUEST = 4105
 }

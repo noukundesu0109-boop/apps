@@ -35,7 +35,9 @@ internal class AlarmReceiver : BroadcastReceiver() {
                     )
                 }
                 if (action != AlarmIntents.ACTION_DONE) TaskAlarms.reschedule(app)
-                if (action == AlarmIntents.ACTION_FIRE) {
+                if (action == AlarmIntents.ACTION_FIRE && intent.getBooleanExtra(AlarmIntents.EXTRA_SILENT, false)) {
+                    TaskAlarms.showQuiet(app, title.orEmpty(), detail.orEmpty(), intent.getStringExtra(AlarmIntents.EXTRA_ITEM).orEmpty())
+                } else if (action == AlarmIntents.ACTION_FIRE) {
                     val service = Intent(app, AlarmRingService::class.java).setAction(AlarmIntents.ACTION_FIRE).apply {
                         putExtra(AlarmIntents.EXTRA_TITLE, title)
                         putExtra(AlarmIntents.EXTRA_DETAIL, detail)

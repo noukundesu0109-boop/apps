@@ -140,6 +140,10 @@
     if (!item || !isoDate(item.done) || cycle == null) return null;
     return addDays(item.done, cycle);
   }
+  function extraNatural(item) {
+    if (item && (item.repeat || isoDate(item.due))) return isoDate(item.due);
+    return nextCar(item);
+  }
   function nextCar(item) {
     var months = wholeNumber(item && item.months);
     if (!item || !isoDate(item.done) || months == null || months === 0) return null;
@@ -217,7 +221,7 @@
       rows.push({ kind: "car", id: row.item.id, title: String(row.item.name || "").trim() || "車", tabId: row.tabId, time: hasTime(row.item.time) ? row.item.time : null, label: "車", shifted: isoDate(row.item.shift) });
     });
     data.extras.forEach(function (row) {
-      if (shown(nextCar(row.item), row.item) !== iso) return;
+      if (shown(extraNatural(row.item), row.item) !== iso) return;
       rows.push({ kind: "x:" + row.tabId, id: row.item.id, title: String(row.item.name || "").trim() || row.name, tabId: row.tabId, time: hasTime(row.item.time) ? row.item.time : null, label: row.name, shifted: isoDate(row.item.shift) });
     });
     return byTime(rows);
@@ -233,7 +237,7 @@
     data.cleaning.forEach(function (item) { add(shown(nextClean(item), item), "clean"); });
     data.bousai.forEach(function (item) { add(shown(isoDate(item.due) ? item.due : null, item), "bousai"); });
     data.cars.forEach(function (row) { add(shown(nextCar(row.item), row.item), "car"); });
-    data.extras.forEach(function (row) { add(shown(nextCar(row.item), row.item), "x:" + row.tabId); });
+    data.extras.forEach(function (row) { add(shown(extraNatural(row.item), row.item), "x:" + row.tabId); });
     return marks;
   }
   function extraColor(kind) {

@@ -80,7 +80,7 @@ object MemoPlanner {
                     return Occurrence(shownDate(nextCarDate(car.done, car.months), car.shift)?.toString(), car.time, false)
                 }
                 val extra = board.extras.find { it.id == itemId && (tabId.isBlank() || it.tabId == tabId) } ?: return null
-                Occurrence(shownDate(nextCarDate(extra.done, extra.months), extra.shift)?.toString(), extra.time, false)
+                Occurrence(shownDate(extraNatural(extra), extra.shift)?.toString(), extra.time, false)
             }
         }
     }
@@ -169,6 +169,67 @@ object MemoPlanner {
         return LocalDate.of(year, monthIndex + 1, minOf(date.dayOfMonth, length))
     }
 
+    /**
+     * The next date strictly after [from].
+     * Months keep the day of [origin], so Jan 31 plus one month is the end of February,
+     * and the month after that returns to the 31st when the month has one.
+     */
+    fun stepAfter(origin: LocalDate, repeat: String, every: Int, from: LocalDate): LocalDate {
+        val step = every.coerceAtLeast(1)
+        return when (repeat) {
+            REPEAT_DAY -> from.plusDays(step.toLong())
+            REPEAT_WEEK -> from.plusDays(7L * step)
+            else -> {
+                var k = 1
+                var candidate = addMonthsClamped(origin, step)
+                while (!candidate.isAfter(from) && k < 2400) {
+                    k += 1
+                    candidate = addMonthsClamped(origin, k * step)
+                }
+                candidate
+            }
+        }
+    }
+
+    /**
+     * After 「やった」. Plan basis steps from the original date, so a 1st postponed to the 3rd
+     * still comes back on the 1st. Done basis starts from the day it was finished.
+     * A result that is still today or earlier moves forward until it is in the future.
+     */
+    fun advanceDaily(
+        planned: LocalDate?,
+        series: LocalDate?,
+        repeat: String,
+        every: Int,
+        basis: String,
+        today: LocalDate,
+    ): AdvancedDaily {
+        val step = every.coerceAtLeast(1)
+        val origin = series ?: planned ?: today
+        if (basis == BASIS_DONE) {
+            val next = if (repeat == REPEAT_DAY || repeat == REPEAT_WEEK) {
+                stepAfter(today, repeat, step, today)
+            } else {
+                addMonthsClamped(today, step)
+            }
+            return AdvancedDaily(next, today)
+        }
+        val cursor = planned ?: origin
+        var next = stepAfter(origin, repeat, step, cursor)
+        var guard = 0
+        while (!next.isAfter(today) && guard < 2400) {
+            next = stepAfter(origin, repeat, step, next)
+            guard += 1
+        }
+        return AdvancedDaily(next, origin)
+    }
+
+    /** Stored planned date for a repeating item, otherwise the old done-plus-months date. */
+    fun extraNatural(item: ExtraEntry): LocalDate? {
+        if (item.repeat != null) return parseDate(item.due) ?: nextCarDate(item.done, item.months)
+        return nextCarDate(item.done, item.months)
+    }
+
     /** A postponed date replaces only the current occurrence. */
     fun shownDate(natural: LocalDate?, shift: String?): LocalDate? = parseDate(shift) ?: natural
 
@@ -189,7 +250,7 @@ object MemoPlanner {
         for (item in board.cleaning) add(shownDate(nextCleanDate(item.done, item.cycle), item.shift), KIND_CLEAN)
         for (item in board.bousai) add(shownDate(parseDate(item.due), item.shift), KIND_BOUSAI)
         for (item in board.cars) add(shownDate(nextCarDate(item.done, item.months), item.shift), KIND_CAR)
-        for (item in board.extras) add(shownDate(nextCarDate(item.done, item.months), item.shift), extraKind(item.tabId))
+        for (item in board.extras) add(shownDate(extraNatural(item), item.shift), extraKind(item.tabId))
         return out
     }
 
@@ -214,7 +275,7 @@ object MemoPlanner {
             items += DayItem(KIND_CAR, item.id, item.title, time = item.time, tabId = item.tabId, label = "車", shifted = parseDate(item.shift) != null)
         }
         for (item in board.extras) {
-            if (shownDate(nextCarDate(item.done, item.months), item.shift)?.toString() != iso) continue
+            if (shownDate(extraNatural(item), item.shift)?.toString() != iso) continue
             items += DayItem(extraKind(item.tabId), item.id, item.title, time = item.time, tabId = item.tabId, label = item.tabName, shifted = parseDate(item.shift) != null)
         }
         return items.sortedWith(
@@ -241,7 +302,7 @@ object MemoPlanner {
         val nowInstant = nowZ.toInstant()
         val limit = nowZ.plusYears(2).toInstant()
         val extra = ArrayList<PlannedMemoAlarm>()
-        fun add(ringKey: String, idPrefix: String, id: String, title: String, date: LocalDate?, timeText: String?) {
+        fun add(ringKey: String, idPrefix: String, id: String, title: String, date: LocalDate?, timeText: String?, silent: Boolean = false) {
             if (!ringsOn(board, ringKey)) return
             val time = parseTime(timeText) ?: return
             val day = date ?: return
@@ -261,6 +322,7 @@ object MemoPlanner {
                     else -> "tab"
                 },
                 tabId = ringKey,
+                silent = silent,
             )
         }
         for (item in board.cleaning) {
@@ -273,7 +335,7 @@ object MemoPlanner {
             add(item.tabId, "t", item.id, item.title, shownDate(nextCarDate(item.done, item.months), item.shift), item.time)
         }
         for (item in board.extras) {
-            add(item.tabId, "t", item.id, item.title, shownDate(nextCarDate(item.done, item.months), item.shift), item.time)
+            add(item.tabId, "t", item.id, item.title, shownDate(extraNatural(item), item.shift), item.time, silent = !item.sound)
         }
         return (memoAlarms + extra).sortedWith(compareBy({ it.triggerAtMillis }, { it.id }))
     }
@@ -304,6 +366,7 @@ object MemoPlanner {
     }
 
     fun leadFor(board: TaskBoard, alarm: PlannedMemoAlarm): Int {
+        if (alarm.silent) return 0
         if (alarm.kind == KIND_MEMO) {
             val own = board.memos.firstOrNull { it.id == alarm.itemId }?.lead
             if (own != null && own in LEAD_CHOICES) return own
@@ -355,6 +418,12 @@ object MemoPlanner {
     const val KIND_CLEAN = "clean"
     const val KIND_BOUSAI = "bousai"
     const val KIND_CAR = "car"
+    const val REPEAT_DAY = "day"
+    const val REPEAT_WEEK = "week"
+    const val REPEAT_MONTH = "month"
+    const val REPEAT_MONTHS = "months"
+    const val BASIS_PLAN = "plan"
+    const val BASIS_DONE = "done"
     const val DEFAULT_LEAD = 10
     const val LATER_MINUTES = 10
     val LEAD_CHOICES = setOf(0, 5, 10, 15, 30, 60)
@@ -420,7 +489,10 @@ data class PlannedMemoAlarm(
     val leadMinutes: Int = 0,
     val sourceDate: String = "",
     val sourceTime: String = "",
+    val silent: Boolean = false,
 )
+
+data class AdvancedDaily(val due: LocalDate, val series: LocalDate)
 
 data class TaskBoard(
     val memos: List<MemoEntry> = emptyList(),
@@ -470,6 +542,12 @@ data class ExtraEntry(
     val months: Int?,
     val shift: String? = null,
     val time: String? = null,
+    val repeat: String? = null,
+    val every: Int? = null,
+    val basis: String? = null,
+    val due: String? = null,
+    val series: String? = null,
+    val sound: Boolean = true,
 )
 
 data class DayItem(
@@ -489,6 +567,12 @@ data class DailySummary(
 )
 
 private val ISO_DATE = Regex("""^\d{4}-\d{2}-\d{2}$""")
+private val REPEATS = setOf(
+    MemoPlanner.REPEAT_DAY,
+    MemoPlanner.REPEAT_WEEK,
+    MemoPlanner.REPEAT_MONTH,
+    MemoPlanner.REPEAT_MONTHS,
+)
 private val TIME = Regex("""^\d{2}:\d{2}$""")
 
 fun parseMemos(json: String): List<MemoEntry> = parseBoard(json).memos
@@ -625,6 +709,12 @@ private fun readExtras(tabs: JSONArray?): List<ExtraEntry> {
                 months = jsonWholeNumber(item, "months"),
                 shift = item.optString("shift").takeIf { MemoPlanner.parseDate(it) != null },
                 time = item.optString("time").takeIf { MemoPlanner.parseTime(it) != null },
+                repeat = item.optString("repeat").takeIf { it in REPEATS },
+                every = jsonWholeNumber(item, "every"),
+                basis = item.optString("basis").takeIf { it == MemoPlanner.BASIS_PLAN || it == MemoPlanner.BASIS_DONE },
+                due = item.optString("due").takeIf { MemoPlanner.parseDate(it) != null },
+                series = item.optString("series").takeIf { MemoPlanner.parseDate(it) != null },
+                sound = if (item.has("sound") && item.opt("sound") is Boolean) item.getBoolean("sound") else true,
             )
         }
     }
@@ -696,6 +786,18 @@ private fun markTabDone(tabs: JSONArray?, itemId: String, tabId: String, today: 
             if (item.optString("id") != itemId) continue
             item.put("done", today)
             item.put("shift", JSONObject.NULL)
+            val repeat = item.optString("repeat")
+            if (repeat in REPEATS) {
+                val every = jsonWholeNumber(item, "every") ?: jsonWholeNumber(item, "months") ?: 1
+                val basis = item.optString("basis").ifBlank { MemoPlanner.BASIS_PLAN }
+                val planned = MemoPlanner.parseDate(item.optString("due"))
+                    ?: MemoPlanner.parseDate(item.optString("series"))
+                val series = MemoPlanner.parseDate(item.optString("series")) ?: planned
+                val todayDate = MemoPlanner.parseDate(today) ?: continue
+                val advanced = MemoPlanner.advanceDaily(planned, series, repeat, every, basis, todayDate)
+                item.put("due", advanced.due.toString())
+                item.put("series", advanced.series.toString())
+            }
         }
     }
 }

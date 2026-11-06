@@ -12,6 +12,7 @@ class TaskApp : Application() {
         ensureSummaryChannel(this)
         ensureNextTaskChannel(this)
         ensureAheadChannel(this)
+        ensureQuietChannel(this)
     }
 }
 
@@ -43,6 +44,22 @@ internal fun ensureAheadChannel(context: android.content.Context) {
     ).apply {
         description = context.getString(R.string.ahead_channel_desc)
         lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+    }
+    manager.createNotificationChannel(channel)
+}
+
+internal fun ensureQuietChannel(context: android.content.Context) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    val manager = context.getSystemService(NotificationManager::class.java) ?: return
+    val channel = NotificationChannel(
+        AlarmIntents.QUIET_CHANNEL_ID,
+        context.getString(R.string.quiet_channel_name),
+        NotificationManager.IMPORTANCE_DEFAULT,
+    ).apply {
+        description = context.getString(R.string.quiet_channel_desc)
+        lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+        setSound(null, null)
+        enableVibration(false)
     }
     manager.createNotificationChannel(channel)
 }
