@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_item_row"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:minHeight="36dp"
+    android:orientation="horizontal"
+    android:paddingTop="2dp"
+    android:paddingBottom="2dp">
+
+    <ImageView
+        android:id="@+id/widget_item_check"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:contentDescription="@string/next_task_done"
+        android:padding="3dp"
+        android:src="@drawable/widget_check" />
+
+    <TextView
+        android:id="@+id/widget_item_time"
+        android:layout_width="48dp"
+        android:layout_height="wrap_content"
+        android:textColor="#FF6F675C"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/widget_item_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#FF1C1917"
+        android:textSize="15sp" />
+</LinearLayout>
