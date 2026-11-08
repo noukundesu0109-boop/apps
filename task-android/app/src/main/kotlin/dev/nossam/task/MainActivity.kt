@@ -130,7 +130,6 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
                 deliver("window.__taskPermStatus", PermissionGate.statusJson(this@MainActivity))
                 UiBridge.lastSchedule?.let { deliver("window.__taskShowSchedule", it) }
                 flushDone()
-                webView.postDelayed({ flushDone() }, 400)
                 maybeStartVoice()
             }
         }
@@ -639,17 +638,21 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         runOnUiThread { deliver("window.__taskMarkDone", json) }
     }
 
-    private fun flushDone() {
-        if (!pageReady) return
+    private fun flushDone(attempt: Int = 0) {
+        if (!pageReady || attempt > 15) return
         val pending = AlarmStore(applicationContext).readPendingDone()
+            .filter { it.day.length == 10 }
+        if (pending.isEmpty()) return
         for (item in pending) {
             val json = org.json.JSONObject()
                 .put("kind", item.kind)
                 .put("id", item.id)
                 .put("tabId", item.tabId)
+                .put("day", item.day)
                 .toString()
             deliver("window.__taskMarkDone", json)
         }
+        webView.postDelayed({ flushDone(attempt + 1) }, 400)
     }
 
     override fun onDestroy() {

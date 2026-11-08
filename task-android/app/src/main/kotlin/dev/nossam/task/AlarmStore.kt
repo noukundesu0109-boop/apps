@@ -8,6 +8,7 @@ internal data class StoredDone(
     val kind: String,
     val id: String,
     val tabId: String,
+    val day: String = "",
 )
 
 internal data class StoredSnooze(
@@ -113,7 +114,7 @@ internal class AlarmStore(context: Context) {
                     val id = item.optString("id")
                     val kind = item.optString("kind")
                     if (id.isBlank() || kind.isBlank()) continue
-                    add(StoredDone(kind = kind, id = id, tabId = item.optString("tab")))
+                    add(StoredDone(kind = kind, id = id, tabId = item.optString("tab"), day = item.optString("day")))
                 }
             }
         } catch (_: Exception) {
@@ -130,10 +131,12 @@ internal class AlarmStore(context: Context) {
         writePendingDone(readPendingDone().filterNot { it.kind == kind && it.id == id })
     }
 
+    fun setPendingDone(items: List<StoredDone>) = writePendingDone(items)
+
     private fun writePendingDone(items: List<StoredDone>) {
         val array = org.json.JSONArray()
         for (item in items) {
-            array.put(JSONObject().put("kind", item.kind).put("id", item.id).put("tab", item.tabId))
+            array.put(JSONObject().put("kind", item.kind).put("id", item.id).put("tab", item.tabId).put("day", item.day))
         }
         write(file("pending-done.json"), JSONObject().put("items", array).toString())
     }

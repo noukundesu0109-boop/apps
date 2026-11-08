@@ -12,7 +12,9 @@ import dev.nossam.task.plan.MemoPlanner
 import dev.nossam.task.plan.PlannedMemoAlarm
 import dev.nossam.task.plan.SnoozeHold
 import dev.nossam.task.plan.TaskBoard
+import dev.nossam.task.plan.PendingCompletion
 import dev.nossam.task.plan.completeOccurrence
+import dev.nossam.task.plan.mergePendingCompletions
 import dev.nossam.task.plan.parseBoard
 import dev.nossam.task.plan.plannedMemosToJson
 import org.json.JSONObject
@@ -57,7 +59,15 @@ internal object TaskAlarms {
     fun updateWork(context: Context, json: String) {
         val app = context.applicationContext
         val schedule = synchronized(lock) {
-            AlarmStore(app).writeWork(json)
+            val store = AlarmStore(app)
+            val pending = store.readPendingDone()
+            val merged = mergePendingCompletions(
+                json,
+                pending.map { PendingCompletion(it.kind, it.id, it.tabId, it.day) },
+            )
+            store.writeWork(merged.json)
+            val still = merged.stillPending.map { it.kind to it.id }.toSet()
+            store.setPendingDone(pending.filter { (it.kind to it.id) in still })
             rebuild(app)
         }
         UiBridge.publishSchedule(schedule)
@@ -126,25 +136,27 @@ internal object TaskAlarms {
     fun complete(context: Context, kind: String, itemId: String, tabId: String) {
         if (itemId.isBlank() || kind.isBlank()) return
         val app = context.applicationContext
+        val today = ZonedDateTime.now(MemoPlanner.ZONE).toLocalDate().toString()
         val schedule = synchronized(lock) {
             val store = AlarmStore(app)
             val json = store.readWork()
             if (json != null) {
-                val today = ZonedDateTime.now(MemoPlanner.ZONE).toLocalDate().toString()
                 store.writeWork(completeOccurrence(json, kind, itemId, tabId, today))
-                store.addPendingDone(StoredDone(kind, itemId, tabId))
+                store.addPendingDone(StoredDone(kind, itemId, tabId, today))
                 store.writeSnoozes(store.readSnoozes().filterNot { sameItem(it, kind, itemId, tabId) })
             }
             rebuild(app)
         }
         AlarmRingService.quietItem(app, kind, itemId, tabId)
         UiBridge.publishSchedule(schedule)
-        UiBridge.publishDone(JSONObject().put("kind", kind).put("id", itemId).put("tabId", tabId).toString())
+        UiBridge.publishDone(
+            JSONObject().put("kind", kind).put("id", itemId).put("tabId", tabId).put("day", today).toString(),
+        )
     }
 
+    /** The screen echo is confirmed in [updateWork]. Clearing here would let an older snapshot erase the completion. */
     fun acknowledgeDone(context: Context, kind: String, itemId: String) {
         if (itemId.length > 200 || kind.length > 20) return
-        AlarmStore(context.applicationContext).removePendingDone(kind, itemId)
     }
 
     fun showLead(context: Context, title: String, time: String, minutes: Int) {

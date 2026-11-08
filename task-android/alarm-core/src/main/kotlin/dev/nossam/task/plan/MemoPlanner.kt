@@ -730,6 +730,125 @@ private fun readLead(raw: Any?): Int? {
     return number.takeIf { it in MemoPlanner.LEAD_CHOICES }
 }
 
+data class PendingCompletion(
+    val kind: String,
+    val id: String,
+    val tabId: String = "",
+    val day: String,
+)
+
+data class MergeResult(
+    val json: String,
+    val stillPending: List<PendingCompletion>,
+)
+
+/**
+ * Keeps widget completions that the screen has not echoed yet.
+ * A completion already present in [json], or an item the screen has deleted, is dropped
+ * from [MergeResult.stillPending] and is not applied again.
+ * Completions without a stored day are left pending and are not applied.
+ */
+fun mergePendingCompletions(json: String, pending: List<PendingCompletion>): MergeResult {
+    if (pending.isEmpty()) return MergeResult(json, emptyList())
+    try {
+        JSONObject(json)
+    } catch (_: Exception) {
+        return MergeResult(json, pending)
+    }
+    var current = json
+    val still = ArrayList<PendingCompletion>()
+    for (item in pending) {
+        if (MemoPlanner.parseDate(item.day) == null || item.id.isBlank() || item.kind.isBlank()) {
+            still += item
+            continue
+        }
+        when (completionState(current, item)) {
+            CompletionState.Reflected, CompletionState.Missing -> Unit
+            CompletionState.Open -> {
+                current = completeOccurrence(current, item.kind, item.id, item.tabId, item.day)
+                still += item
+            }
+            CompletionState.Unknown -> still += item
+        }
+    }
+    return MergeResult(current, still)
+}
+
+private enum class CompletionState { Reflected, Missing, Open, Unknown }
+
+private fun completionState(json: String, item: PendingCompletion): CompletionState {
+    val root = try {
+        JSONObject(json)
+    } catch (_: Exception) {
+        return CompletionState.Unknown
+    }
+    return when (item.kind) {
+        MemoPlanner.KIND_MEMO -> memoCompletion(root.optJSONArray("memos"), item.id)
+        MemoPlanner.KIND_CLEAN -> cleanCompletion(root.optJSONArray("cleaning"), item.id, item.day)
+        MemoPlanner.KIND_BOUSAI -> bousaiCompletion(root.optJSONArray("bousai"), item.id)
+        else -> tabCompletion(root.optJSONArray("tabs"), item.id, item.tabId, item.day)
+    }
+}
+
+private fun memoCompletion(array: JSONArray?, itemId: String): CompletionState {
+    if (array == null) return CompletionState.Unknown
+    for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        if (item.optString("id") != itemId) continue
+        return if (MemoPlanner.parseDate(item.optString("done")) != null) {
+            CompletionState.Reflected
+        } else {
+            CompletionState.Open
+        }
+    }
+    return CompletionState.Missing
+}
+
+private fun cleanCompletion(array: JSONArray?, itemId: String, day: String): CompletionState {
+    if (array == null) return CompletionState.Unknown
+    for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        if (item.optString("id") != itemId) continue
+        val done = item.optString("done") == day
+        return if (done && MemoPlanner.parseDate(item.optString("shift")) == null) {
+            CompletionState.Reflected
+        } else {
+            CompletionState.Open
+        }
+    }
+    return CompletionState.Missing
+}
+
+private fun bousaiCompletion(array: JSONArray?, itemId: String): CompletionState {
+    if (array == null) return CompletionState.Unknown
+    for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        if (item.optString("id") != itemId) continue
+        val clear = MemoPlanner.parseDate(item.optString("due")) == null &&
+            MemoPlanner.parseDate(item.optString("shift")) == null
+        return if (clear) CompletionState.Reflected else CompletionState.Open
+    }
+    return CompletionState.Missing
+}
+
+private fun tabCompletion(tabs: JSONArray?, itemId: String, tabId: String, day: String): CompletionState {
+    if (tabs == null) return CompletionState.Unknown
+    var tabFound = tabId.isBlank()
+    for (t in 0 until tabs.length()) {
+        val tab = tabs.optJSONObject(t) ?: continue
+        if (tabId.isNotBlank() && tab.optString("id") != tabId) continue
+        tabFound = true
+        val items = tab.optJSONArray("items") ?: return CompletionState.Unknown
+        for (i in 0 until items.length()) {
+            val item = items.optJSONObject(i) ?: continue
+            if (item.optString("id") != itemId) continue
+            val done = item.optString("done") == day && MemoPlanner.parseDate(item.optString("shift")) == null
+            return if (done) CompletionState.Reflected else CompletionState.Open
+        }
+    }
+    return if (tabFound) CompletionState.Missing else CompletionState.Unknown
+}
+
 fun completeOccurrence(json: String, kind: String, itemId: String, tabId: String, today: String): String {
     if (MemoPlanner.parseDate(today) == null || itemId.isBlank()) return json
     val root = try {
