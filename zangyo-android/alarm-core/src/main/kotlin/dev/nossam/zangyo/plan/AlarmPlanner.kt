@@ -147,23 +147,24 @@ object AlarmPlanner {
      * Days entered in one calendar year, January through December.
      * 早出の昼勤 is still a day shift. 出勤 is day plus night.
      * A blank day is not counted.
-     * 年休 is its own list, so a day can be both a shift and 年休.
+     * A 年休 day is counted only as 年休, not also as 昼勤, 夜勤, or 休日.
      */
     fun countYear(data: WorkData, year: Int): YearShiftCounts {
         if (year !in 1..9999) return YearShiftCounts(0, 0, 0, 0)
         val prefix = "%04d-".format(year)
+        val leaveDays = data.leave.filter { it.startsWith(prefix) && isIsoDate(it) }.toSet()
         var day = 0
         var night = 0
         var off = 0
         for ((iso, shift) in data.shifts) {
-            if (!iso.startsWith(prefix) || !isIsoDate(iso)) continue
+            if (!iso.startsWith(prefix) || !isIsoDate(iso) || iso in leaveDays) continue
             when (shift) {
                 "day" -> day += 1
                 "night" -> night += 1
                 "off" -> off += 1
             }
         }
-        val leave = data.leave.count { it.startsWith(prefix) && isIsoDate(it) }
+        val leave = leaveDays.size
         var earlyDays = 0
         var earlyHours = 0.0
         for ((iso, _) in data.shifts) {

@@ -628,13 +628,6 @@
     var counts = { day: 0, night: 0, off: 0, leave: 0 };
     var prefix = String(year) + "-";
     var shifts = data && data.shifts || {};
-    Object.keys(shifts).forEach(function (iso) {
-      if (iso.indexOf(prefix) !== 0 || !realDate(iso)) return;
-      if (shifts[iso] === "day") counts.day += 1;
-      else if (shifts[iso] === "night") counts.night += 1;
-      else if (shifts[iso] === "off") counts.off += 1;
-    });
-    counts.attended = counts.day + counts.night;
     var seen = {};
     var leave = data && Array.isArray(data.leave) ? data.leave : [];
     leave.forEach(function (iso) {
@@ -642,6 +635,13 @@
       seen[iso] = true;
       counts.leave += 1;
     });
+    Object.keys(shifts).forEach(function (iso) {
+      if (seen[iso] || iso.indexOf(prefix) !== 0 || !realDate(iso)) return;
+      if (shifts[iso] === "day") counts.day += 1;
+      else if (shifts[iso] === "night") counts.night += 1;
+      else if (shifts[iso] === "off") counts.off += 1;
+    });
+    counts.attended = counts.day + counts.night;
     return counts;
   }
   function displayedYear(host) {

@@ -489,11 +489,12 @@ class AlarmPlannerTest {
             leave = setOf("2026-08-14", "2026-01-05", "2026-02-29", "2025-08-01"),
         )
         val counts = AlarmPlanner.countYear(data, 2026)
-        assertEquals(2, counts.day)
+        assertEquals(1, counts.day)
         assertEquals(1, counts.night)
-        assertEquals(3, counts.attended)
+        assertEquals(2, counts.attended)
         assertEquals(1, counts.off)
         assertEquals(2, counts.leave)
+        assertEquals(5, counts.attended + counts.off + counts.leave)
         assertEquals(YearShiftCounts(1, 0, 0, 1), AlarmPlanner.countYear(data, 2025))
         assertEquals(1, AlarmPlanner.countYear(data, 2025).attended)
         assertEquals(YearShiftCounts(0, 1, 0, 0), AlarmPlanner.countYear(data, 2027))
@@ -567,7 +568,7 @@ class AlarmPlannerTest {
             shifts = mapOf("2024-02-29" to "day", "2026-02-29" to "night"),
             leave = setOf("2024-02-29"),
         )
-        assertEquals(YearShiftCounts(1, 0, 0, 1), AlarmPlanner.countYear(data, 2024))
+        assertEquals(YearShiftCounts(0, 0, 0, 1), AlarmPlanner.countYear(data, 2024))
         assertEquals(YearShiftCounts(0, 0, 0, 0), AlarmPlanner.countYear(data, 2026))
     }
 
