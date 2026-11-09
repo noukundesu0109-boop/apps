@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">タスク</string>
+    <string name="channel_name">アラーム</string>
+    <string name="channel_desc">メモの時刻アラーム</string>
+    <string name="summary_channel_name">朝のまとめ</string>
+    <string name="summary_channel_desc">その日のメモと、掃除・防災・車の予定を知らせます</string>
+    <string name="next_task_channel">次のタスク</string>
+    <string name="next_task_channel_desc">今日の次の予定を、通知に出します</string>
+    <string name="next_task_title">次のタスク</string>
+    <string name="next_task_done">済み</string>
+    <string name="ahead_channel">事前通知</string>
+    <string name="ahead_channel_desc">予定の少し前に知らせます</string>
+    <string name="ahead_title">まもなく</string>
+    <string name="quiet_channel_name">音なしの予定</string>
+    <string name="quiet_channel_desc">音をオフにした日常の予定を、音なしで知らせます</string>
+    <string name="voice_label">声でメモ</string>
+    <string name="voice_widget_desc">話して予定を入れます</string>
+    <string name="today_widget_label">今日の予定</string>
+    <string name="today_widget_desc">今日の予定を一覧し、チェックで済みにします</string>
+    <string name="today_widget_empty">今日の予定はありません</string>
+    <string name="today_widget_add">声でメモ</string>
+    <string name="voice_prompt">予定を話してください</string>
+    <string name="voice_capture_wait">聞いています。ゆっくり話してください。</string>
+    <string name="voice_command_prompt">保存、やり直し、やめる、と話せます</string>
+    <string name="voice_denied">マイクが許可されていないので、声では入れられません。設定からマイクをオンにしてください</string>
+    <string name="voice_unavailable">このスマホでは声の入力が使えません</string>
+    <string name="voice_nomatch">聞き取れませんでした。もう一度話してください</string>
+</resources>
