@@ -38,6 +38,7 @@
             <data android:mimeType="image/png" />
         </intent>
         <package android:name="dev.nossam.task" />
+        <package android:name="jp.kikitori" />
     </queries>
 
     <application

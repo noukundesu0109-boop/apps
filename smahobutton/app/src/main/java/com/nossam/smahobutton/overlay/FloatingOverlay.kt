@@ -23,9 +23,11 @@ import com.nossam.smahobutton.logic.GESTURE_LONG
 import com.nossam.smahobutton.logic.GESTURE_TAP
 import com.nossam.smahobutton.logic.GestureSignal
 import com.nossam.smahobutton.logic.ScreenEdge
+import com.nossam.smahobutton.logic.TYPE_TALK
 import com.nossam.smahobutton.logic.actionIcon
 import com.nossam.smahobutton.logic.actionShort
 import com.nossam.smahobutton.logic.actionTitle
+import com.nossam.smahobutton.logic.holdsToTalk
 import com.nossam.smahobutton.logic.PLACE_FREE
 import com.nossam.smahobutton.logic.centerFraction
 import com.nossam.smahobutton.logic.clampFraction
@@ -44,6 +46,8 @@ class FloatingOverlay(
         fun onGesture(button: ButtonSpec, kind: String)
         fun onMoved(id: String, edge: String, xFraction: Float, yFraction: Float)
         fun onMenuAction(action: ActionSpec)
+        fun onTalkDown(): Boolean
+        fun onTalkUp()
     }
 
     fun hostContext(): Context = context
@@ -54,6 +58,7 @@ class FloatingOverlay(
     private var hidden = false
     private var folded = false
     private var menuRoot: View? = null
+    private var menuTalking = false
 
     fun render(buttons: List<ButtonSpec>) {
         specs = buttons
@@ -156,9 +161,32 @@ class FloatingOverlay(
                 }
                 alpha = 1f
                 contentDescription = actionTitle(action)
-                setOnClickListener {
-                    dismissMenu()
-                    callbacks.onMenuAction(action)
+                if (action.type == TYPE_TALK) {
+                    setOnTouchListener { view, event ->
+                        val buttonView = view as RoundButtonView
+                        when (event.actionMasked) {
+                            MotionEvent.ACTION_DOWN -> {
+                                menuTalking = true
+                                buttonView.listening = true
+                                if (!callbacks.onTalkDown()) buttonView.listening = false
+                                true
+                            }
+                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                buttonView.listening = false
+                                val wasTalking = menuTalking
+                                menuTalking = false
+                                if (wasTalking) callbacks.onTalkUp()
+                                if (event.actionMasked == MotionEvent.ACTION_UP) dismissMenu()
+                                true
+                            }
+                            else -> true
+                        }
+                    }
+                } else {
+                    setOnClickListener {
+                        dismissMenu()
+                        callbacks.onMenuAction(action)
+                    }
                 }
             }
             val captionAbove = y + itemSize + context.dp(28) > bounds.height() - context.dp(8)
@@ -199,6 +227,10 @@ class FloatingOverlay(
     }
 
     fun dismissMenu() {
+        if (menuTalking) {
+            menuTalking = false
+            callbacks.onTalkUp()
+        }
         val root = menuRoot ?: return
         menuRoot = null
         runCatching { wm?.removeView(root) }
@@ -251,6 +283,19 @@ class FloatingOverlay(
     }
 
     private fun onTouch(holder: Holder, event: MotionEvent) {
+        if (holdsToTalk(holder.spec)) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    if (!holder.talking) {
+                        holder.talking = true
+                        holder.view.listening = true
+                        if (!callbacks.onTalkDown()) holder.view.listening = false
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> finishTalk(holder)
+            }
+            return
+        }
         val now = SystemClock.uptimeMillis()
         val signals = when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> holder.machine.onDown(event.rawX, event.rawY, now)
@@ -347,7 +392,15 @@ class FloatingOverlay(
         callbacks.onMoved(holder.spec.id, edgeName, savedX, savedY)
     }
 
+    private fun finishTalk(holder: Holder) {
+        if (!holder.talking) return
+        holder.talking = false
+        holder.view.listening = false
+        callbacks.onTalkUp()
+    }
+
     private fun detach(holder: Holder) {
+        finishTalk(holder)
         holder.longRunnable?.let { holder.view.removeCallbacks(it) }
         holder.tapRunnable?.let { holder.view.removeCallbacks(it) }
         runCatching { wm?.removeView(holder.view) }
@@ -399,6 +452,7 @@ class FloatingOverlay(
         val machine: ButtonGestureMachine,
         var spec: ButtonSpec,
         var dragging: Boolean = false,
+        var talking: Boolean = false,
         var longRunnable: Runnable? = null,
         var tapRunnable: Runnable? = null,
     )

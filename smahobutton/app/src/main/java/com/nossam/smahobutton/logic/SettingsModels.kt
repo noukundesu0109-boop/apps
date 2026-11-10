@@ -129,6 +129,7 @@ const val TYPE_REMEMBER_VOLUME = "remember_volume"
 const val TYPE_SHUTTER = "shutter"
 const val TYPE_TASK_VOICE = "task_voice"
 const val TYPE_REGION = "region"
+const val TYPE_TALK = "talk"
 
 val ACTION_CHOICES = listOf(
     ActionChoice(TYPE_NONE, "なし"),
@@ -149,6 +150,7 @@ val ACTION_CHOICES = listOf(
     ActionChoice(TYPE_SHUTTER, "カメラのシャッター"),
     ActionChoice(TYPE_TASK_VOICE, "タスクに声で予定を入れる"),
     ActionChoice(TYPE_REGION, "囲ってスクショ・コピー"),
+    ActionChoice(TYPE_TALK, "話す（ききとり）"),
 )
 
 const val GESTURE_TAP = "tap"
@@ -221,12 +223,26 @@ fun actionShort(action: ActionSpec): String = when (action.type) {
     TYPE_SHUTTER -> "カメラ"
     TYPE_TASK_VOICE -> "声で予定"
     TYPE_REGION -> "囲む"
+    TYPE_TALK -> "話す"
     else -> "なし"
 }
 
-/** Icon drawn for this action. The voice action is a microphone. */
+/** The whole press is push-to-talk, so tap, double-tap, and long-press are not also fired. */
+fun holdsToTalk(button: ButtonSpec): Boolean {
+    if (!button.useMenu && button.tap.type == TYPE_TALK) return true
+    if (button.doubleTap.type == TYPE_TALK) return true
+    if (button.longPress.type == TYPE_TALK) return true
+    return false
+}
+
+fun assignsTalk(button: ButtonSpec): Boolean {
+    if (holdsToTalk(button)) return true
+    return button.useMenu && button.menu.any { it.type == TYPE_TALK }
+}
+
+/** Icon drawn for this action. Voice actions use a microphone. */
 fun actionIcon(action: ActionSpec): String? = when (action.type) {
-    TYPE_TASK_VOICE -> "mic"
+    TYPE_TASK_VOICE, TYPE_TALK -> "mic"
     else -> null
 }
 

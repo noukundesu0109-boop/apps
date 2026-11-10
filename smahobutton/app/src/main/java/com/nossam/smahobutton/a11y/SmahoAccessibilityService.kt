@@ -9,6 +9,7 @@ import android.graphics.Bitmap
 import android.graphics.Path
 import android.graphics.Rect
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Display
@@ -16,6 +17,7 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import com.nossam.smahobutton.logic.insertAtCursor
 import com.nossam.smahobutton.logic.PixelRect
 import com.nossam.smahobutton.logic.TextSnippet
 import com.nossam.smahobutton.logic.snippetsInside
@@ -152,6 +154,79 @@ class SmahoAccessibilityService : AccessibilityService() {
                 }
             },
         )
+    }
+
+    /**
+     * Inserts [insert] at the focused field's cursor. The rest of the text stays.
+     * Does nothing when no editable field is focused.
+     */
+    fun insertTextAtCursor(insert: String) {
+        if (insert.isEmpty()) return
+        val node = findEditableFocus() ?: return
+        try {
+            val current = node.text?.toString().orEmpty()
+            val (next, cursor) = insertAtCursor(current, node.textSelectionStart, insert)
+            val args = Bundle()
+            args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, next)
+            if (!node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return
+            val selection = Bundle()
+            selection.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, cursor)
+            selection.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, cursor)
+            node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selection)
+        } catch (_: Exception) {
+        } finally {
+            runCatching { node.recycle() }
+        }
+    }
+
+    private fun findEditableFocus(): AccessibilityNodeInfo? {
+        val listed = runCatching { windows }.getOrNull().orEmpty()
+        try {
+            val ordered = listed.sortedByDescending { window ->
+                val focused = if (window.isFocused) 2 else 0
+                val application = if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION) 1 else 0
+                focused + application
+            }
+            for (window in ordered) {
+                if (window.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) continue
+                if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
+                val root = runCatching { window.root }.getOrNull() ?: continue
+                val found = editableFocus(root)
+                if (found != null) {
+                    if (found !== root) runCatching { root.recycle() }
+                    return found
+                }
+                runCatching { root.recycle() }
+            }
+        } catch (_: Exception) {
+            return null
+        } finally {
+            listed.forEach { runCatching { it.recycle() } }
+        }
+        return null
+    }
+
+    private fun editableFocus(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val focus = runCatching { node.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull()
+        if (focus != null) {
+            if (focus.isEditable) return focus
+            if (focus !== node) runCatching { focus.recycle() }
+        }
+        return walkEditable(node)
+    }
+
+    private fun walkEditable(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (node.isEditable && node.isFocused) return node
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            val found = walkEditable(child)
+            if (found != null) {
+                if (found !== child) runCatching { child.recycle() }
+                return found
+            }
+            runCatching { child.recycle() }
+        }
+        return null
     }
 
     fun textInside(rect: PixelRect): String {

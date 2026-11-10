@@ -27,6 +27,13 @@ class RoundButtonView(context: Context) : View(context) {
             invalidateOutline()
         }
 
+    var listening: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            invalidate()
+        }
+
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -106,8 +113,8 @@ class RoundButtonView(context: Context) : View(context) {
         val radius = cx - context.dp(1).toFloat()
         fill.color = paletteArgb(spec.color).toInt()
         canvas.drawCircle(cx, cy, radius, fill)
-        ring.strokeWidth = context.dp(1.5f)
-        ring.alpha = 190
+        ring.strokeWidth = if (listening) context.dp(3f) else context.dp(1.5f)
+        ring.alpha = if (listening) 255 else 190
         canvas.drawCircle(cx, cy, radius - ring.strokeWidth / 2f, ring)
         val shown = spec.label.trim()
         if (shown.isNotEmpty()) {
@@ -115,6 +122,7 @@ class RoundButtonView(context: Context) : View(context) {
         } else {
             drawIcon(canvas, spec.icon, cx, cy, radius)
         }
+        drawOpenMouth(canvas, width.toFloat())
     }
 
     private fun drawBlob(canvas: Canvas, size: Float) {
@@ -137,14 +145,16 @@ class RoundButtonView(context: Context) : View(context) {
         }
         val (dx, dy) = ButtonShapes.eyeShift(spec.shape)
         fill.color = Color.WHITE
-        val eyeW = size * 0.055f
-        val eyeH = size * 0.15f
+        val scale = if (listening) 1.45f else 1f
+        val eyeW = size * 0.055f * scale
+        val eyeH = size * 0.15f * scale
         val gap = size * 0.04f
         val cx = size * 0.50f + dx * size
         val cy = size * 0.48f + dy * size
         val radius = eyeW / 2f
         canvas.drawRoundRect(cx - gap - eyeW, cy - eyeH / 2f, cx - gap, cy + eyeH / 2f, radius, radius, fill)
         canvas.drawRoundRect(cx + gap, cy - eyeH / 2f, cx + gap + eyeW, cy + eyeH / 2f, radius, radius, fill)
+        drawOpenMouth(canvas, size)
     }
 
     private fun drawRobot(canvas: Canvas, size: Float) {
@@ -158,17 +168,34 @@ class RoundButtonView(context: Context) : View(context) {
         canvas.drawCircle(box.ballX, box.ballY, box.ballRadius, fill)
         canvas.drawRoundRect(box.head, box.headCorner, box.headCorner, fill)
         fill.color = ink
-        canvas.drawOval(box.eyeLeft, fill)
-        canvas.drawOval(box.eyeRight, fill)
-        icon.color = ink
-        icon.style = Paint.Style.STROKE
-        icon.strokeWidth = size * 0.035f
-        icon.strokeCap = Paint.Cap.ROUND
-        val smile = Path()
-        smile.moveTo(box.smileLeft, box.smileY)
-        smile.quadTo(size / 2f, box.smileY + size * 0.09f, box.smileRight, box.smileY)
-        canvas.drawPath(smile, icon)
-        icon.style = Paint.Style.FILL
+        val grow = if (listening) size * 0.03f else 0f
+        canvas.drawOval(box.eyeLeft.grown(grow), fill)
+        canvas.drawOval(box.eyeRight.grown(grow), fill)
+        if (listening) {
+            drawOpenMouth(canvas, size)
+        } else {
+            icon.color = ink
+            icon.style = Paint.Style.STROKE
+            icon.strokeWidth = size * 0.035f
+            icon.strokeCap = Paint.Cap.ROUND
+            val smile = Path()
+            smile.moveTo(box.smileLeft, box.smileY)
+            smile.quadTo(size / 2f, box.smileY + size * 0.09f, box.smileRight, box.smileY)
+            canvas.drawPath(smile, icon)
+            icon.style = Paint.Style.FILL
+        }
+    }
+
+    private fun RectF.grown(amount: Float): RectF {
+        return RectF(left - amount, top - amount, right + amount, bottom + amount)
+    }
+
+    private fun drawOpenMouth(canvas: Canvas, size: Float) {
+        if (!listening) return
+        val ink = if (prefersDarkInk(paletteArgb(spec.color))) 0xFF1C1B19.toInt() else Color.WHITE
+        fill.color = ink
+        val cx = size / 2f
+        canvas.drawOval(cx - size * 0.09f, size * 0.66f, cx + size * 0.09f, size * 0.80f, fill)
     }
 
     private fun robotOutline(size: Float): Path {

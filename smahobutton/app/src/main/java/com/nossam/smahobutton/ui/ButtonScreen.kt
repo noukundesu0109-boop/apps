@@ -69,8 +69,10 @@ import com.nossam.smahobutton.logic.PALETTE
 import com.nossam.smahobutton.logic.SHAPE_CHOICES
 import com.nossam.smahobutton.logic.SettingsSpec
 import com.nossam.smahobutton.logic.TYPE_OPEN_APP
+import com.nossam.smahobutton.logic.TYPE_TALK
 import com.nossam.smahobutton.logic.TYPE_TASK_VOICE
 import com.nossam.smahobutton.logic.actionTitle
+import com.nossam.smahobutton.logic.assignsTalk
 import com.nossam.smahobutton.logic.sizeDp
 import com.nossam.smahobutton.overlay.RoundButtonView
 import com.nossam.smahobutton.ui.theme.argbColor
@@ -342,6 +344,13 @@ private fun ButtonCard(
                 }
                 Switch(checked = button.useMenu, onCheckedChange = { on -> onChange { it.copy(useMenu = on) } })
             }
+            if (assignsTalk(button)) {
+                Text(
+                    "押したまま話す動きです。タップや長押しに入れると使いやすいです。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             if (button.useMenu) {
                 button.menu.forEachIndexed { menuIndex, action ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -395,12 +404,21 @@ private fun ActionSheet(
                     onClick = { onPick(choice) },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                 ) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        if (choice.type == TYPE_TASK_VOICE) {
-                            MicMark()
-                            Spacer(Modifier.width(10.dp))
+                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (choice.type == TYPE_TASK_VOICE || choice.type == TYPE_TALK) {
+                                MicMark()
+                                Spacer(Modifier.width(10.dp))
+                            }
+                            Text(choice.title)
                         }
-                        Text(choice.title)
+                        if (choice.type == TYPE_TALK) {
+                            Text(
+                                "押したまま話す動きです。タップや長押しに入れると使いやすいです。",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
                     }
                 }
             }

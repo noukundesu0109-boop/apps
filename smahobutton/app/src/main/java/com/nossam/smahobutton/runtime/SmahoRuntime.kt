@@ -1,6 +1,7 @@
 package com.nossam.smahobutton.runtime
 
 import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
@@ -19,6 +20,7 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import com.nossam.smahobutton.SmahoApp
 import com.nossam.smahobutton.action.ActionExecutor
+import com.nossam.smahobutton.action.Kikitori
 import com.nossam.smahobutton.a11y.SmahoAccessibilityService
 import com.nossam.smahobutton.data.SettingsRepository
 import com.nossam.smahobutton.logic.ActionSpec
@@ -73,6 +75,7 @@ object SmahoRuntime {
     private var filterCache: FilterConfig? = null
     private var filterAt = 0L
     private val executor by lazy { ActionExecutor(app) }
+    private var talkGeneration = 0
 
     var accessibility: SmahoAccessibilityService? = null
     var a11yOverlay: FloatingOverlay? = null
@@ -194,6 +197,33 @@ object SmahoRuntime {
         override fun onMenuAction(action: ActionSpec) {
             executor.perform(action)
         }
+
+        override fun onTalkDown(): Boolean = talkDown()
+
+        override fun onTalkUp() = talkUp()
+    }
+
+    /** Press-and-hold. Returns false when ききとり could not be started. */
+    fun talkDown(): Boolean {
+        val host = talkContext() ?: return false
+        talkGeneration += 1
+        val generation = talkGeneration
+        return Kikitori.start(host) { code, text ->
+            if (generation != talkGeneration) return@start
+            if (code != 0 || text.isNullOrEmpty()) return@start
+            runCatching { accessibility?.insertTextAtCursor(text) }
+        }
+    }
+
+    fun talkUp() {
+        val host = talkContext() ?: return
+        Kikitori.stop(host)
+    }
+
+    private fun talkContext(): Context? {
+        accessibility?.let { return it }
+        if (::app.isInitialized) return app
+        return null
     }
 
     fun refreshButtons() {
