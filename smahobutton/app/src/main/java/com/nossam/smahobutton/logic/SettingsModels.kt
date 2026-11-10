@@ -227,7 +227,7 @@ fun actionShort(action: ActionSpec): String = when (action.type) {
     else -> "なし"
 }
 
-/** The whole press is push-to-talk, so tap, double-tap, and long-press are not also fired. */
+/** Push-to-talk owns the press. A move past the touch slop is still a drag, same as other buttons. */
 fun holdsToTalk(button: ButtonSpec): Boolean {
     if (!button.useMenu && button.tap.type == TYPE_TALK) return true
     if (button.doubleTap.type == TYPE_TALK) return true

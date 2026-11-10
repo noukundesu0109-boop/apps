@@ -45,6 +45,13 @@ class TalkLinkTest {
     }
 
     @Test
+    fun micPermissionCanBeRequestedAgainUntilItIsGranted() {
+        assertTrue(shouldAskForMic(granted = false, promptAlreadyOpen = false))
+        assertFalse(shouldAskForMic(granted = true, promptAlreadyOpen = false))
+        assertFalse(shouldAskForMic(granted = false, promptAlreadyOpen = true))
+    }
+
+    @Test
     fun textIsInsertedAtTheCursorWithoutReplacingTheField() {
         val (next, cursor) = insertAtCursor("おはよう", 2, "ね")
         assertEquals("おはねよう", next)

@@ -61,6 +61,11 @@ fun wavHeader(pcmBytes: Int, sampleRate: Int = TALK_SAMPLE_RATE): ByteArray {
  * Inserts [insert] at the cursor. The rest of the field stays.
  * A missing cursor appends. Text is inserted exactly, including any newline it already has.
  */
+/** Ask the system again whenever the mic is still denied and a prompt is not already open. */
+fun shouldAskForMic(granted: Boolean, promptAlreadyOpen: Boolean): Boolean {
+    return !granted && !promptAlreadyOpen
+}
+
 fun insertAtCursor(current: String, selectionStart: Int, insert: String): Pair<String, Int> {
     val cursor = if (selectionStart < 0) current.length else selectionStart.coerceIn(0, current.length)
     val next = current.substring(0, cursor) + insert + current.substring(cursor)

@@ -35,6 +35,7 @@ import com.nossam.smahobutton.logic.placeButtons
 import com.nossam.smahobutton.logic.placeMenuItems
 import com.nossam.smahobutton.logic.sizeDp
 import com.nossam.smahobutton.logic.snapEdge
+import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 class FloatingOverlay(
@@ -48,6 +49,7 @@ class FloatingOverlay(
         fun onMenuAction(action: ActionSpec)
         fun onTalkDown(): Boolean
         fun onTalkUp()
+        fun onTalkCancel()
     }
 
     fun hostContext(): Context = context
@@ -166,9 +168,13 @@ class FloatingOverlay(
                         val buttonView = view as RoundButtonView
                         when (event.actionMasked) {
                             MotionEvent.ACTION_DOWN -> {
-                                menuTalking = true
-                                buttonView.listening = true
-                                callbacks.onTalkDown()
+                                if (menuTalking) {
+                                    menuTalking = false
+                                    callbacks.onTalkUp()
+                                }
+                                val started = callbacks.onTalkDown()
+                                menuTalking = started
+                                buttonView.listening = started
                                 true
                             }
                             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -284,16 +290,7 @@ class FloatingOverlay(
 
     private fun onTouch(holder: Holder, event: MotionEvent) {
         if (holdsToTalk(holder.spec)) {
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    if (!holder.talking) {
-                        holder.talking = true
-                        holder.view.listening = true
-                        callbacks.onTalkDown()
-                    }
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> finishTalk(holder)
-            }
+            onTalkTouch(holder, event)
             return
         }
         val now = SystemClock.uptimeMillis()
@@ -392,11 +389,60 @@ class FloatingOverlay(
         callbacks.onMoved(holder.spec.id, edgeName, savedX, savedY)
     }
 
+    private fun onTalkTouch(holder: Holder, event: MotionEvent) {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                if (holder.dragging) {
+                    cancelTalk(holder)
+                    snap(holder)
+                } else if (holder.talking) {
+                    finishTalk(holder)
+                }
+                holder.pressX = event.rawX
+                holder.pressY = event.rawY
+                holder.lastX = event.rawX
+                holder.lastY = event.rawY
+                val started = callbacks.onTalkDown()
+                holder.talking = started
+                holder.view.listening = started
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val moved = hypot(event.rawX - holder.pressX, event.rawY - holder.pressY)
+                if (!holder.dragging && moved > touchSlop()) {
+                    cancelTalk(holder)
+                    holder.lastX = event.rawX
+                    holder.lastY = event.rawY
+                    holder.dragging = true
+                }
+                if (holder.dragging) {
+                    drag(holder, event.rawX - holder.lastX, event.rawY - holder.lastY)
+                    holder.lastX = event.rawX
+                    holder.lastY = event.rawY
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (holder.dragging) {
+                    cancelTalk(holder)
+                    snap(holder)
+                } else {
+                    finishTalk(holder)
+                }
+            }
+        }
+    }
+
     private fun finishTalk(holder: Holder) {
         if (!holder.talking) return
         holder.talking = false
         holder.view.listening = false
         callbacks.onTalkUp()
+    }
+
+    private fun cancelTalk(holder: Holder) {
+        if (!holder.talking) return
+        holder.talking = false
+        holder.view.listening = false
+        callbacks.onTalkCancel()
     }
 
     private fun detach(holder: Holder) {
@@ -453,6 +499,10 @@ class FloatingOverlay(
         var spec: ButtonSpec,
         var dragging: Boolean = false,
         var talking: Boolean = false,
+        var pressX: Float = 0f,
+        var pressY: Float = 0f,
+        var lastX: Float = 0f,
+        var lastY: Float = 0f,
         var longRunnable: Runnable? = null,
         var tapRunnable: Runnable? = null,
     )

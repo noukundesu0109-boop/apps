@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import com.nossam.smahobutton.runtime.SmahoRuntime
 import com.nossam.smahobutton.service.OverlayService
 
 class PermitActivity : ComponentActivity() {
@@ -22,6 +23,11 @@ class PermitActivity : ComponentActivity() {
         } else {
             finish()
         }
+    }
+
+    override fun onDestroy() {
+        if (intent?.action == ACTION_MIC) SmahoRuntime.micPromptClosed()
+        super.onDestroy()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
