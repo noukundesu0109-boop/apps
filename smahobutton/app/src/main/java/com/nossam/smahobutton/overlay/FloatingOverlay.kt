@@ -168,7 +168,7 @@ class FloatingOverlay(
                             MotionEvent.ACTION_DOWN -> {
                                 menuTalking = true
                                 buttonView.listening = true
-                                if (!callbacks.onTalkDown()) buttonView.listening = false
+                                callbacks.onTalkDown()
                                 true
                             }
                             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -289,7 +289,7 @@ class FloatingOverlay(
                     if (!holder.talking) {
                         holder.talking = true
                         holder.view.listening = true
-                        if (!callbacks.onTalkDown()) holder.view.listening = false
+                        callbacks.onTalkDown()
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> finishTalk(holder)

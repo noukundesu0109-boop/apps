@@ -6,4 +6,5 @@
     <string name="channel_desc">ボタンを出しているあいだ、ここに静かな通知が残ります。</string>
     <string name="notif_title">スマホボタン</string>
     <string name="notif_text">ボタンを表示しています</string>
+    <string name="notif_listening">きいています</string>
 </resources>

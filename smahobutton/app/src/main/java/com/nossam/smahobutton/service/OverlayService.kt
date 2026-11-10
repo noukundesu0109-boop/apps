@@ -1,11 +1,13 @@
 package com.nossam.smahobutton.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
 import android.content.ComponentCallbacks
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.os.Build
@@ -22,6 +24,8 @@ import com.nossam.smahobutton.runtime.SmahoRuntime
 
 class OverlayService : Service() {
     private var overlay: FloatingOverlay? = null
+    private var microphoneOn = false
+    private var listening = false
     private val configCallbacks = object : ComponentCallbacks {
         override fun onConfigurationChanged(newConfig: Configuration) {
             overlay?.relayout()
@@ -33,6 +37,7 @@ class OverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         startInForeground()
         registerComponentCallbacks(configCallbacks)
         ensureOverlay()
@@ -59,6 +64,7 @@ class OverlayService : Service() {
     }
 
     override fun onDestroy() {
+        if (instance === this) instance = null
         unregisterComponentCallbacks(configCallbacks)
         if (SmahoRuntime.serviceOverlay === overlay) SmahoRuntime.serviceOverlay = null
         overlay?.hide()
@@ -78,17 +84,80 @@ class OverlayService : Service() {
         SmahoRuntime.serviceOverlay = overlay
     }
 
+    /**
+     * Adds the microphone foreground type while this process is allowed to use the mic.
+     * The button service keeps running as specialUse when this is refused.
+     */
+    fun promoteMicrophone(): Boolean {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+        if (microphoneOn) return true
+        microphoneOn = true
+        return try {
+            startInForeground()
+            true
+        } catch (error: Exception) {
+            Log.w(TAG, "microphone foreground type was not accepted", error)
+            microphoneOn = false
+            listening = false
+            try {
+                startInForeground()
+            } catch (restore: Exception) {
+                Log.w(TAG, "could not restore the button foreground service", restore)
+            }
+            false
+        }
+    }
+
+    fun beginListening(): Boolean {
+        if (!microphoneOn && !promoteMicrophone()) return false
+        listening = true
+        return try {
+            startInForeground()
+            true
+        } catch (error: Exception) {
+            Log.w(TAG, "listening notification failed", error)
+            listening = false
+            try {
+                startInForeground()
+            } catch (_: Exception) {
+            }
+            false
+        }
+    }
+
+    fun endListening() {
+        if (!listening) return
+        listening = false
+        try {
+            startInForeground()
+        } catch (error: Exception) {
+            Log.w(TAG, "could not restore the button notification", error)
+        }
+    }
+
     private fun startInForeground() {
         ensureChannel(this)
-        val type = if (Build.VERSION.SDK_INT >= 34) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-        } else {
-            0
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), foregroundType())
+    }
+
+    private fun foregroundType(): Int {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return 0
+        var type = 0
+        if (Build.VERSION.SDK_INT >= 34) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
         }
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), type)
+        if (microphoneOn && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        }
+        return type
     }
 
     private fun notification(): Notification {
+        val text = if (listening) getString(R.string.notif_listening) else getString(R.string.notif_text)
         val open = PendingIntent.getActivity(
             this,
             0,
@@ -98,7 +167,7 @@ class OverlayService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_button)
             .setContentTitle(getString(R.string.notif_title))
-            .setContentText(getString(R.string.notif_text))
+            .setContentText(text)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(open)
@@ -120,5 +189,26 @@ class OverlayService : Service() {
         fun stop(context: Context) {
             context.stopService(Intent(context, OverlayService::class.java))
         }
+
+        /** True when the running button service may open the microphone. */
+        fun armMicrophone(): Boolean = instance?.promoteMicrophone() == true
+
+        fun showListening(): Boolean = instance?.beginListening() == true
+
+        fun hideListening() {
+            instance?.endListening()
+        }
+
+        fun armIfPermitted(context: Context) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+            armMicrophone()
+        }
+
+        @Volatile
+        private var instance: OverlayService? = null
     }
 }

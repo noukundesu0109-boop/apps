@@ -202,6 +202,8 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         val enabled = (application as SmahoApp).repository.state.value?.enabled == true
         if (enabled) OverlayService.start(this)
+        OverlayService.armIfPermitted(this)
+        window.decorView.post { OverlayService.armIfPermitted(this) }
     }
 
     companion object {

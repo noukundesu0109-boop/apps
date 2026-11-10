@@ -18,9 +18,12 @@ import android.provider.Settings
 import android.view.KeyEvent
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
+import android.Manifest
+import com.nossam.smahobutton.PermitActivity
 import com.nossam.smahobutton.SmahoApp
 import com.nossam.smahobutton.action.ActionExecutor
 import com.nossam.smahobutton.action.Kikitori
+import com.nossam.smahobutton.action.TalkRecorder
 import com.nossam.smahobutton.a11y.SmahoAccessibilityService
 import com.nossam.smahobutton.data.SettingsRepository
 import com.nossam.smahobutton.logic.ActionSpec
@@ -203,21 +206,50 @@ object SmahoRuntime {
         override fun onTalkUp() = talkUp()
     }
 
-    /** Press-and-hold. Returns false when ききとり could not be started. */
+    /** Press-and-hold. Returns false when recording did not start. The button face still stays up. */
     fun talkDown(): Boolean {
         val host = talkContext() ?: return false
         talkGeneration += 1
-        val generation = talkGeneration
-        return Kikitori.start(host) { code, text ->
-            if (generation != talkGeneration) return@start
-            if (code != 0 || text.isNullOrEmpty()) return@start
-            runCatching { accessibility?.insertTextAtCursor(text) }
+        Kikitori.warm(host)
+        if (!micGranted(host)) {
+            requestMicOnce(host)
+            return false
         }
+        if (!OverlayService.armMicrophone() || !TalkRecorder.start(host)) return false
+        OverlayService.showListening()
+        return true
     }
 
     fun talkUp() {
         val host = talkContext() ?: return
-        Kikitori.stop(host)
+        val generation = talkGeneration
+        val file = TalkRecorder.stop()
+        OverlayService.hideListening()
+        if (file == null) return
+        Kikitori.recognize(host, file) { code, text ->
+            if (generation != talkGeneration) return@recognize
+            if (code != 0 || text.isNullOrEmpty()) return@recognize
+            runCatching { accessibility?.insertTextAtCursor(text) }
+        }
+    }
+
+    private fun micGranted(context: Context): Boolean {
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun requestMicOnce(context: Context) {
+        val prefs = context.getSharedPreferences("smahobutton_mic", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("asked", false)) return
+        val intent = Intent(context, PermitActivity::class.java).apply {
+            action = PermitActivity.ACTION_MIC
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(intent)
+            prefs.edit().putBoolean("asked", true).apply()
+        } catch (_: Exception) {
+        }
     }
 
     private fun talkContext(): Context? {
