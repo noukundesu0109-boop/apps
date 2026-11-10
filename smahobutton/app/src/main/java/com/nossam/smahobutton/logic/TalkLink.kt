@@ -9,6 +9,7 @@ const val KIKITORI_AUDIO = "audio"
 const val KIKITORI_TEXT = "text"
 const val KIKITORI_ERROR = "error"
 const val TALK_SAMPLE_RATE = 16000
+const val TALK_LOG_TAG = "SmahoTalk"
 
 /** Both calls go to the same service with startService. This app records the audio. */
 data class TalkCall(

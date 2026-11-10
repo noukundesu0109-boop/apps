@@ -15,8 +15,8 @@ android {
         applicationId = "com.nossam.smahobutton"
         minSdk = 28
         targetSdk = 36
-        versionCode = 20
-        versionName = "2.9"
+        versionCode = 21
+        versionName = "2.10"
     }
 
     signingConfigs {

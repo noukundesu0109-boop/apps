@@ -130,8 +130,9 @@ class OverlayService : Service() {
     }
 
     fun endListening() {
-        if (!listening) return
+        if (!listening && !microphoneOn) return
         listening = false
+        microphoneOn = false
         try {
             startInForeground()
         } catch (error: Exception) {

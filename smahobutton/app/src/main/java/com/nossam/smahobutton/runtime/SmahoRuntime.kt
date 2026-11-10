@@ -52,6 +52,7 @@ import com.nossam.smahobutton.logic.ShutterSpot
 import com.nossam.smahobutton.logic.isCameraPackage
 import com.nossam.smahobutton.logic.orientationKey
 import com.nossam.smahobutton.logic.SettingsSpec
+import com.nossam.smahobutton.logic.TALK_LOG_TAG
 import com.nossam.smahobutton.logic.shouldAskForMic
 import com.nossam.smahobutton.overlay.RegionCapture
 import com.nossam.smahobutton.overlay.ShutterAim
@@ -81,6 +82,8 @@ object SmahoRuntime {
     private val executor by lazy { ActionExecutor(app) }
     private var talkGeneration = 0
     private var micPromptOpen = false
+    private val talkHandler = Handler(Looper.getMainLooper())
+    private val insertDelaysMs = intArrayOf(250, 500, 800)
 
     var accessibility: SmahoAccessibilityService? = null
     var a11yOverlay: FloatingOverlay? = null
@@ -219,7 +222,11 @@ object SmahoRuntime {
             requestMic(host)
             return false
         }
-        if (!OverlayService.armMicrophone() || !TalkRecorder.start(host)) return false
+        if (!OverlayService.armMicrophone()) return false
+        if (!TalkRecorder.start(host)) {
+            OverlayService.hideListening()
+            return false
+        }
         OverlayService.showListening()
         return true
     }
@@ -229,12 +236,40 @@ object SmahoRuntime {
         val generation = talkGeneration
         val file = TalkRecorder.stop()
         OverlayService.hideListening()
-        if (file == null) return
-        Kikitori.recognize(host, file) { code, text ->
+        if (file == null) {
+            Log.i(TALK_LOG_TAG, "no audio, receiver not sent")
+            return
+        }
+        val watch = Runnable { Log.i(TALK_LOG_TAG, "ResultReceiver did not arrive") }
+        talkHandler.postDelayed(watch, 8_000)
+        val sent = Kikitori.recognize(host, file) { code, text ->
+            talkHandler.removeCallbacks(watch)
             if (generation != talkGeneration) return@recognize
             if (code != 0 || text.isNullOrEmpty()) return@recognize
-            runCatching { accessibility?.insertTextAtCursor(text) }
+            insertWithRetry(text, generation, 0)
         }
+        if (!sent) talkHandler.removeCallbacks(watch)
+    }
+
+    private fun insertWithRetry(text: String, generation: Int, attempt: Int) {
+        if (generation != talkGeneration) return
+        when (accessibility?.insertTextAtCursor(text)) {
+            true -> {
+                Log.i(TALK_LOG_TAG, "inserted textLength=${text.length}")
+                return
+            }
+            false -> {
+                Log.i(TALK_LOG_TAG, "text arrived but the field rejected the insert")
+                return
+            }
+            null -> Unit
+        }
+        val delay = insertDelaysMs.getOrNull(attempt)
+        if (delay == null) {
+            Log.i(TALK_LOG_TAG, "text arrived but no focused field")
+            return
+        }
+        talkHandler.postDelayed({ insertWithRetry(text, generation, attempt + 1) }, delay.toLong())
     }
 
     /** Finger moved into a drag, or the press was rejected. Drop the audio and do not insert it. */

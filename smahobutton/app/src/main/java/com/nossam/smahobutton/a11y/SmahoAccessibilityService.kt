@@ -158,22 +158,26 @@ class SmahoAccessibilityService : AccessibilityService() {
 
     /**
      * Inserts [insert] at the focused field's cursor. The rest of the text stays.
-     * Does nothing when no editable field is focused.
+     * True when the text was inserted. False when a field was found but rejected it.
+     * Null when no field could be found.
      */
-    fun insertTextAtCursor(insert: String) {
-        if (insert.isEmpty()) return
-        val node = findEditableFocus() ?: return
-        try {
+    fun insertTextAtCursor(insert: String): Boolean? {
+        if (insert.isEmpty()) return false
+        val node = findEditableFocus() ?: return null
+        return try {
             val current = node.text?.toString().orEmpty()
             val (next, cursor) = insertAtCursor(current, node.textSelectionStart, insert)
             val args = Bundle()
             args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, next)
-            if (!node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return
+            val wrote = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+            if (!wrote) return false
             val selection = Bundle()
             selection.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, cursor)
             selection.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, cursor)
             node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selection)
+            true
         } catch (_: Exception) {
+            false
         } finally {
             runCatching { node.recycle() }
         }
@@ -181,52 +185,101 @@ class SmahoAccessibilityService : AccessibilityService() {
 
     private fun findEditableFocus(): AccessibilityNodeInfo? {
         val listed = runCatching { windows }.getOrNull().orEmpty()
+        val held = ArrayList<AccessibilityNodeInfo>()
         try {
-            val ordered = listed.sortedByDescending { window ->
-                val focused = if (window.isFocused) 2 else 0
-                val application = if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION) 1 else 0
-                focused + application
+            val apps = listed.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+            val ordered = apps.sortedByDescending { window ->
+                val active = if (window.isActive) 2 else 0
+                val focused = if (window.isFocused) 1 else 0
+                active + focused
             }
+            val roots = ArrayList<AccessibilityNodeInfo>()
             for (window in ordered) {
-                if (window.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) continue
-                if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
                 val root = runCatching { window.root }.getOrNull() ?: continue
-                val found = editableFocus(root)
-                if (found != null) {
-                    if (found !== root) runCatching { root.recycle() }
-                    return found
-                }
-                runCatching { root.recycle() }
+                held += root
+                roots += root
+                val focus = runCatching { root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull()
+                if (focus != null) held += focus
+                val editable = focus?.let { editableAround(it, held) }
+                if (editable != null) return detach(editable, held)
             }
+            val root = roots.firstOrNull() ?: return null
+            val found = ArrayList<AccessibilityNodeInfo>()
+            collectEditable(root, found)
+            for (node in found) {
+                if (held.none { it === node }) held += node
+            }
+            val chosen = pickEditable(found) ?: return null
+            return detach(chosen, held)
         } catch (_: Exception) {
             return null
         } finally {
+            held.forEach { runCatching { it.recycle() } }
             listed.forEach { runCatching { it.recycle() } }
+        }
+    }
+
+    private fun detach(chosen: AccessibilityNodeInfo, held: MutableList<AccessibilityNodeInfo>): AccessibilityNodeInfo {
+        held.removeAll { it === chosen }
+        return chosen
+    }
+
+    private fun editableAround(
+        node: AccessibilityNodeInfo,
+        held: MutableList<AccessibilityNodeInfo>,
+    ): AccessibilityNodeInfo? {
+        if (canAcceptText(node)) return node
+        val child = findEditableChild(node)
+        if (child != null) return child
+        var parent = node.parent
+        var guard = 0
+        while (parent != null && guard++ < 6) {
+            held += parent
+            if (canAcceptText(parent)) return parent
+            parent = parent.parent
         }
         return null
     }
 
-    private fun editableFocus(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        val focus = runCatching { node.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull()
-        if (focus != null) {
-            if (focus.isEditable) return focus
-            if (focus !== node) runCatching { focus.recycle() }
-        }
-        return walkEditable(node)
-    }
-
-    private fun walkEditable(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if (node.isEditable && node.isFocused) return node
+    private fun findEditableChild(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         for (index in 0 until node.childCount) {
             val child = node.getChild(index) ?: continue
-            val found = walkEditable(child)
-            if (found != null) {
-                if (found !== child) runCatching { child.recycle() }
-                return found
+            if (canAcceptText(child)) return child
+            val nested = findEditableChild(child)
+            if (nested != null) {
+                if (nested !== child) runCatching { child.recycle() }
+                return nested
             }
             runCatching { child.recycle() }
         }
         return null
+    }
+
+    private fun collectEditable(node: AccessibilityNodeInfo, out: MutableList<AccessibilityNodeInfo>) {
+        if (canAcceptText(node) && (node.isVisibleToUser || node.isFocused || node.isAccessibilityFocused)) {
+            out += node
+        }
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            collectEditable(child, out)
+            if (out.none { it === child }) runCatching { child.recycle() }
+        }
+    }
+
+    private fun pickEditable(nodes: List<AccessibilityNodeInfo>): AccessibilityNodeInfo? {
+        nodes.firstOrNull { it.isFocused || it.isAccessibilityFocused }?.let { return it }
+        nodes.firstOrNull { it.textSelectionStart >= 0 }?.let { return it }
+        if (nodes.size == 1) return nodes[0]
+        return nodes.maxByOrNull { node ->
+            val bounds = Rect()
+            node.getBoundsInScreen(bounds)
+            bounds.bottom
+        }
+    }
+
+    private fun canAcceptText(node: AccessibilityNodeInfo): Boolean {
+        if (node.isEditable) return true
+        return node.actionList?.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT } == true
     }
 
     fun textInside(rect: PixelRect): String {

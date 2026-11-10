@@ -15,6 +15,7 @@ import com.nossam.smahobutton.logic.KIKITORI_ERROR
 import com.nossam.smahobutton.logic.KIKITORI_PACKAGE
 import com.nossam.smahobutton.logic.KIKITORI_RECEIVER
 import com.nossam.smahobutton.logic.KIKITORI_TEXT
+import com.nossam.smahobutton.logic.TALK_LOG_TAG
 import com.nossam.smahobutton.logic.talkRecognize
 import com.nossam.smahobutton.logic.talkWarm
 import java.io.File
@@ -24,8 +25,6 @@ import java.io.File
  * A missing app or a failed start is ignored. Nothing is shown.
  */
 object Kikitori {
-    private const val TAG = "SmahoButton"
-
     fun warm(context: Context) {
         val call = talkWarm()
         try {
@@ -46,10 +45,14 @@ object Kikitori {
         val pending = object : ResultReceiver(Handler(Looper.getMainLooper())) {
             override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
                 val error = resultData?.getString(KIKITORI_ERROR)
-                if (resultCode != 0 && !error.isNullOrBlank()) Log.d(TAG, error)
+                val text = resultData?.getString(KIKITORI_TEXT)
+                Log.i(
+                    TALK_LOG_TAG,
+                    "receiver=present resultCode=$resultCode textLength=${text?.length ?: -1}",
+                )
+                if (resultCode != 0 && !error.isNullOrBlank()) Log.i(TALK_LOG_TAG, "error")
                 discard(context, uri, file)
                 if (delivered) return
-                val text = resultData?.getString(KIKITORI_TEXT)
                 if (resultCode == 0 && !text.isNullOrEmpty()) delivered = true
                 onResult(resultCode, text)
             }
@@ -64,8 +67,10 @@ object Kikitori {
         return try {
             context.grantUriPermission(KIKITORI_PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             context.startService(intent)
+            Log.i(TALK_LOG_TAG, "TALK_RECOGNIZE receiver=attached")
             true
         } catch (_: Exception) {
+            Log.i(TALK_LOG_TAG, "TALK_RECOGNIZE receiver=absent send failed")
             discard(context, uri, file)
             false
         }
