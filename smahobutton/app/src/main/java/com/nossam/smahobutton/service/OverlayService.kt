@@ -88,13 +88,13 @@ class OverlayService : Service() {
      * Adds the microphone foreground type while this process is allowed to use the mic.
      * The button service keeps running as specialUse when this is refused.
      */
-    fun promoteMicrophone(): Boolean {
+    fun promoteMicrophone(force: Boolean = false): Boolean {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             return false
         }
-        if (microphoneOn) return true
+        if (microphoneOn && !force) return true
         microphoneOn = true
         return try {
             startInForeground()
@@ -193,6 +193,9 @@ class OverlayService : Service() {
 
         /** True when the running button service may open the microphone. */
         fun armMicrophone(): Boolean = instance?.promoteMicrophone() == true
+
+        /** Re-applies the microphone type while this process has a visible activity. */
+        fun promoteWhileVisible(): Boolean = instance?.promoteMicrophone(force = true) == true
 
         fun showListening(): Boolean = instance?.beginListening() == true
 

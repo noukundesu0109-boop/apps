@@ -11,6 +11,9 @@ const val KIKITORI_ERROR = "error"
 const val TALK_SAMPLE_RATE = 16000
 const val TALK_LOG_TAG = "SmahoTalk"
 
+/** Drag distance before a talk press becomes a move. Larger than the system touch slop. */
+const val TALK_DRAG_SLOP_DP = 96
+
 /** Both calls go to the same service with startService. This app records the audio. */
 data class TalkCall(
     val action: String,

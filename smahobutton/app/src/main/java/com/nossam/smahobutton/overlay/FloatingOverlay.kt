@@ -6,6 +6,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.SystemClock
 import android.util.DisplayMetrics
+import android.util.Log
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
@@ -23,6 +24,8 @@ import com.nossam.smahobutton.logic.GESTURE_LONG
 import com.nossam.smahobutton.logic.GESTURE_TAP
 import com.nossam.smahobutton.logic.GestureSignal
 import com.nossam.smahobutton.logic.ScreenEdge
+import com.nossam.smahobutton.logic.TALK_DRAG_SLOP_DP
+import com.nossam.smahobutton.logic.TALK_LOG_TAG
 import com.nossam.smahobutton.logic.TYPE_TALK
 import com.nossam.smahobutton.logic.actionIcon
 import com.nossam.smahobutton.logic.actionShort
@@ -50,6 +53,7 @@ class FloatingOverlay(
         fun onTalkDown(): Boolean
         fun onTalkUp()
         fun onTalkCancel()
+        fun keepTalkOnCancel(): Boolean
     }
 
     fun hostContext(): Context = context
@@ -177,12 +181,24 @@ class FloatingOverlay(
                                 buttonView.listening = started
                                 true
                             }
-                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                            MotionEvent.ACTION_CANCEL -> {
+                                if (callbacks.keepTalkOnCancel()) {
+                                    Log.i(TALK_LOG_TAG, "talk gesture cancelled while listening; keep recording")
+                                    true
+                                } else {
+                                    buttonView.listening = false
+                                    val wasTalking = menuTalking
+                                    menuTalking = false
+                                    if (wasTalking) callbacks.onTalkUp()
+                                    true
+                                }
+                            }
+                            MotionEvent.ACTION_UP -> {
                                 buttonView.listening = false
                                 val wasTalking = menuTalking
                                 menuTalking = false
                                 if (wasTalking) callbacks.onTalkUp()
-                                if (event.actionMasked == MotionEvent.ACTION_UP) dismissMenu()
+                                dismissMenu()
                                 true
                             }
                             else -> true
@@ -408,7 +424,7 @@ class FloatingOverlay(
             }
             MotionEvent.ACTION_MOVE -> {
                 val moved = hypot(event.rawX - holder.pressX, event.rawY - holder.pressY)
-                if (!holder.dragging && moved > touchSlop()) {
+                if (!holder.dragging && moved > context.dp(TALK_DRAG_SLOP_DP)) {
                     cancelTalk(holder)
                     holder.lastX = event.rawX
                     holder.lastY = event.rawY
@@ -420,7 +436,19 @@ class FloatingOverlay(
                     holder.lastY = event.rawY
                 }
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+            MotionEvent.ACTION_CANCEL -> {
+                if (!holder.dragging && callbacks.keepTalkOnCancel()) {
+                    holder.talking = true
+                    holder.view.listening = true
+                    Log.i(TALK_LOG_TAG, "talk gesture cancelled while listening; keep recording")
+                } else if (holder.dragging) {
+                    cancelTalk(holder)
+                    snap(holder)
+                } else {
+                    finishTalk(holder)
+                }
+            }
+            MotionEvent.ACTION_UP -> {
                 if (holder.dragging) {
                     cancelTalk(holder)
                     snap(holder)
@@ -443,6 +471,15 @@ class FloatingOverlay(
         holder.talking = false
         holder.view.listening = false
         callbacks.onTalkCancel()
+    }
+
+    fun clearTalkHold() {
+        menuTalking = false
+        for (holder in views.values) {
+            holder.talking = false
+            holder.dragging = false
+            holder.view.listening = false
+        }
     }
 
     private fun detach(holder: Holder) {

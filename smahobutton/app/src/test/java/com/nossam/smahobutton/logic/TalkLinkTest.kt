@@ -17,6 +17,7 @@ class TalkLinkTest {
         assertEquals(warm.className, recognize.className)
         assertEquals("jp.kikitori.action.TALK_RECOGNIZE", recognize.action)
         assertEquals("SmahoTalk", TALK_LOG_TAG)
+        assertTrue(TALK_DRAG_SLOP_DP >= 48)
         assertEquals("receiver", KIKITORI_RECEIVER)
         assertEquals("audio", KIKITORI_AUDIO)
         assertEquals("text", KIKITORI_TEXT)

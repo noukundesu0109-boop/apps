@@ -82,6 +82,8 @@ object SmahoRuntime {
     private val executor by lazy { ActionExecutor(app) }
     private var talkGeneration = 0
     private var micPromptOpen = false
+    private var talkUiRequested = false
+    private var recordingFromActivity = false
     private val talkHandler = Handler(Looper.getMainLooper())
     private val insertDelaysMs = intArrayOf(250, 500, 800)
 
@@ -211,6 +213,8 @@ object SmahoRuntime {
         override fun onTalkUp() = talkUp()
 
         override fun onTalkCancel() = talkCancel()
+
+        override fun keepTalkOnCancel(): Boolean = talkUiRequested
     }
 
     /** Press-and-hold. False means recording did not start, so the button must not stay held. */
@@ -222,20 +226,50 @@ object SmahoRuntime {
             requestMic(host)
             return false
         }
-        if (!OverlayService.armMicrophone()) return false
-        if (!TalkRecorder.start(host)) {
-            OverlayService.hideListening()
+        talkUiRequested = true
+        if (!com.nossam.smahobutton.TalkListenActivity.open(host)) {
+            talkUiRequested = false
             return false
         }
-        OverlayService.showListening()
         return true
+    }
+
+    /** Called while [com.nossam.smahobutton.TalkListenActivity] is resumed. */
+    fun onTalkActivityVisible() {
+        if (!talkUiRequested) {
+            com.nossam.smahobutton.TalkListenActivity.close()
+            return
+        }
+        if (!OverlayService.promoteWhileVisible()) {
+            Log.i(TALK_LOG_TAG, "microphone promote rejected while activity visible")
+            abortTalkUi()
+            return
+        }
+        if (recordingFromActivity) return
+        val host = talkContext() ?: return
+        if (!TalkRecorder.start(host)) {
+            Log.i(TALK_LOG_TAG, "recording failed after visible promote")
+            abortTalkUi()
+            return
+        }
+        recordingFromActivity = true
+        OverlayService.showListening()
+        Log.i(TALK_LOG_TAG, "microphone promoted while activity visible")
+    }
+
+    fun onTalkActivityDestroyed() {
+        if (!talkUiRequested) return
+        abortTalkUi()
     }
 
     fun talkUp() {
         val host = talkContext() ?: return
+        talkUiRequested = false
+        recordingFromActivity = false
         val file = TalkRecorder.stop()
         if (file == null) {
             OverlayService.hideListening()
+            com.nossam.smahobutton.TalkListenActivity.close()
             Log.i(TALK_LOG_TAG, "no audio, receiver not sent")
             return
         }
@@ -244,6 +278,7 @@ object SmahoRuntime {
             insertWithRetry(text, 0)
         }
         OverlayService.hideListening()
+        com.nossam.smahobutton.TalkListenActivity.close()
     }
 
     private fun insertWithRetry(text: String, attempt: Int) {
@@ -269,9 +304,22 @@ object SmahoRuntime {
     /** Finger moved into a drag, or the press was rejected. Drop the audio and do not insert it. */
     fun talkCancel() {
         talkGeneration += 1
+        talkUiRequested = false
+        recordingFromActivity = false
         val file = TalkRecorder.stop()
         OverlayService.hideListening()
         file?.delete()
+        com.nossam.smahobutton.TalkListenActivity.close()
+    }
+
+    private fun abortTalkUi() {
+        talkUiRequested = false
+        recordingFromActivity = false
+        TalkRecorder.stop()?.delete()
+        OverlayService.hideListening()
+        a11yOverlay?.clearTalkHold()
+        serviceOverlay?.clearTalkHold()
+        com.nossam.smahobutton.TalkListenActivity.close()
     }
 
     fun micPromptClosed() {

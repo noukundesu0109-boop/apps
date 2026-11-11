@@ -81,6 +81,15 @@
             android:noHistory="true"
             android:theme="@style/Theme.SmahoButton.Translucent" />
 
+        <activity
+            android:name=".TalkListenActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/Theme.SmahoButton.Talk"
+            android:windowSoftInputMode="stateUnchanged" />
+
         <service
             android:name=".service.OverlayService"
             android:exported="false"
