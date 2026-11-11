@@ -11,6 +11,8 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.nossam.smahobutton.runtime.SmahoRuntime
 
 /**
@@ -27,9 +29,12 @@ class TalkListenActivity : Activity() {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
         )
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED)
-        window.setGravity(Gravity.TOP)
-        window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, dp(36))
         setContentView(ListeningBarView(this))
+        ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
+            placeBar(insets)
+            insets
+        }
+        placeBar(null)
         instance = this
     }
 
@@ -40,9 +45,31 @@ class TalkListenActivity : Activity() {
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
         )
-        window.setGravity(Gravity.TOP)
-        window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, dp(36))
+        placeBar(ViewCompat.getRootWindowInsets(window.decorView))
+        ViewCompat.requestApplyInsets(window.decorView)
         window.decorView.post { SmahoRuntime.onTalkActivityVisible() }
+    }
+
+    /** Puts the color line just under the status bar and the camera cutout. */
+    private fun placeBar(insets: WindowInsetsCompat?) {
+        val top = insetTop(insets)
+        val attrs = window.attributes
+        attrs.gravity = Gravity.TOP
+        attrs.y = top
+        attrs.width = WindowManager.LayoutParams.MATCH_PARENT
+        attrs.height = dp(BAR_DP)
+        window.attributes = attrs
+    }
+
+    private fun insetTop(insets: WindowInsetsCompat?): Int {
+        val fromInsets = insets?.getInsets(
+            WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.displayCutout(),
+        )?.top ?: 0
+        if (fromInsets > 0) return fromInsets
+        val cutout = window.decorView.rootWindowInsets?.displayCutout?.safeInsetTop ?: 0
+        val id = resources.getIdentifier("status_bar_height", "dimen", "android")
+        val status = if (id > 0) resources.getDimensionPixelSize(id) else dp(48)
+        return maxOf(status, cutout)
     }
 
     override fun onDestroy() {
@@ -60,6 +87,7 @@ class TalkListenActivity : Activity() {
     }
 
     companion object {
+        private const val BAR_DP = 36
         private var instance: TalkListenActivity? = null
 
         fun open(context: Context): Boolean {
