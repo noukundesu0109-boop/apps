@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.Parcel
 import android.os.ResultReceiver
 import android.util.Log
 import androidx.core.content.FileProvider
@@ -83,10 +84,11 @@ object Kikitori {
         val call = talkRecognize()
         val intent = Intent(call.action)
             .setClassName(call.packageName, call.className)
-            .putExtra(KIKITORI_RECEIVER, pending)
+            .putExtra(KIKITORI_RECEIVER, pending.forIpc())
             .putExtra(KIKITORI_AUDIO, uri)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         intent.clipData = ClipData.newRawUri("audio", uri)
+        Log.i(TALK_LOG_TAG, "TALK_RECOGNIZE receiver=flattened")
         return try {
             context.grantUriPermission(KIKITORI_PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             sendRecognize(context, intent)
@@ -107,6 +109,18 @@ object Kikitori {
             context.startForegroundService(intent)
         } catch (_: Exception) {
             context.startService(intent)
+        }
+    }
+
+    /** Parcel as the platform class so the other app can unparcel the binder. */
+    private fun ResultReceiver.forIpc(): ResultReceiver {
+        val parcel = Parcel.obtain()
+        return try {
+            writeToParcel(parcel, 0)
+            parcel.setDataPosition(0)
+            ResultReceiver.CREATOR.createFromParcel(parcel)
+        } finally {
+            parcel.recycle()
         }
     }
 
