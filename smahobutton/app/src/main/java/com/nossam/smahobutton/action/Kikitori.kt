@@ -25,6 +25,15 @@ import java.io.File
  * A missing app or a failed start is ignored. Nothing is shown.
  */
 object Kikitori {
+    /** Log if nothing has come back. The receiver stays alive after this. */
+    private const val RESULT_LOG_MS = 60_000L
+
+    /** Drop the strong reference only after a late result can no longer arrive. */
+    private const val RESULT_HOLD_MS = 180_000L
+
+    private val openReceivers = ArrayList<ResultReceiver>()
+    private val main = Handler(Looper.getMainLooper())
+
     fun warm(context: Context) {
         val call = talkWarm()
         try {
@@ -42,7 +51,9 @@ object Kikitori {
             return false
         }
         var delivered = false
-        val pending = object : ResultReceiver(Handler(Looper.getMainLooper())) {
+        var logWait: Runnable? = null
+        var dropWait: Runnable? = null
+        val pending = object : ResultReceiver(main) {
             override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
                 val error = resultData?.getString(KIKITORI_ERROR)
                 val text = resultData?.getString(KIKITORI_TEXT)
@@ -51,12 +62,24 @@ object Kikitori {
                     "receiver=present resultCode=$resultCode textLength=${text?.length ?: -1}",
                 )
                 if (resultCode != 0 && !error.isNullOrBlank()) Log.i(TALK_LOG_TAG, "error")
+                logWait?.let { main.removeCallbacks(it) }
+                dropWait?.let { main.removeCallbacks(it) }
+                release(this)
                 discard(context, uri, file)
                 if (delivered) return
                 if (resultCode == 0 && !text.isNullOrEmpty()) delivered = true
                 onResult(resultCode, text)
             }
         }
+        hold(pending)
+        val logTask = Runnable {
+            if (isHeld(pending)) Log.i(TALK_LOG_TAG, "ResultReceiver did not arrive")
+        }
+        val dropTask = Runnable { release(pending) }
+        logWait = logTask
+        dropWait = dropTask
+        main.postDelayed(logTask, RESULT_LOG_MS)
+        main.postDelayed(dropTask, RESULT_HOLD_MS)
         val call = talkRecognize()
         val intent = Intent(call.action)
             .setClassName(call.packageName, call.className)
@@ -66,14 +89,37 @@ object Kikitori {
         intent.clipData = ClipData.newRawUri("audio", uri)
         return try {
             context.grantUriPermission(KIKITORI_PACKAGE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            context.startService(intent)
+            sendRecognize(context, intent)
             Log.i(TALK_LOG_TAG, "TALK_RECOGNIZE receiver=attached")
             true
         } catch (_: Exception) {
             Log.i(TALK_LOG_TAG, "TALK_RECOGNIZE receiver=absent send failed")
+            main.removeCallbacks(logTask)
+            main.removeCallbacks(dropTask)
+            release(pending)
             discard(context, uri, file)
             false
         }
+    }
+
+    private fun sendRecognize(context: Context, intent: Intent) {
+        try {
+            context.startForegroundService(intent)
+        } catch (_: Exception) {
+            context.startService(intent)
+        }
+    }
+
+    private fun hold(receiver: ResultReceiver) {
+        synchronized(openReceivers) { openReceivers.add(receiver) }
+    }
+
+    private fun release(receiver: ResultReceiver) {
+        synchronized(openReceivers) { openReceivers.remove(receiver) }
+    }
+
+    private fun isHeld(receiver: ResultReceiver): Boolean {
+        return synchronized(openReceivers) { receiver in openReceivers }
     }
 
     private fun discard(context: Context, uri: Uri, file: File) {

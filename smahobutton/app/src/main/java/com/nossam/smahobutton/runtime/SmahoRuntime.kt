@@ -233,26 +233,20 @@ object SmahoRuntime {
 
     fun talkUp() {
         val host = talkContext() ?: return
-        val generation = talkGeneration
         val file = TalkRecorder.stop()
-        OverlayService.hideListening()
         if (file == null) {
+            OverlayService.hideListening()
             Log.i(TALK_LOG_TAG, "no audio, receiver not sent")
             return
         }
-        val watch = Runnable { Log.i(TALK_LOG_TAG, "ResultReceiver did not arrive") }
-        talkHandler.postDelayed(watch, 8_000)
-        val sent = Kikitori.recognize(host, file) { code, text ->
-            talkHandler.removeCallbacks(watch)
-            if (generation != talkGeneration) return@recognize
+        Kikitori.recognize(host, file) { code, text ->
             if (code != 0 || text.isNullOrEmpty()) return@recognize
-            insertWithRetry(text, generation, 0)
+            insertWithRetry(text, 0)
         }
-        if (!sent) talkHandler.removeCallbacks(watch)
+        OverlayService.hideListening()
     }
 
-    private fun insertWithRetry(text: String, generation: Int, attempt: Int) {
-        if (generation != talkGeneration) return
+    private fun insertWithRetry(text: String, attempt: Int) {
         when (accessibility?.insertTextAtCursor(text)) {
             true -> {
                 Log.i(TALK_LOG_TAG, "inserted textLength=${text.length}")
@@ -269,7 +263,7 @@ object SmahoRuntime {
             Log.i(TALK_LOG_TAG, "text arrived but no focused field")
             return
         }
-        talkHandler.postDelayed({ insertWithRetry(text, generation, attempt + 1) }, delay.toLong())
+        talkHandler.postDelayed({ insertWithRetry(text, attempt + 1) }, delay.toLong())
     }
 
     /** Finger moved into a drag, or the press was rejected. Drop the audio and do not insert it. */
