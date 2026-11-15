@@ -13,8 +13,8 @@ android {
         applicationId = "dev.nossam.task"
         minSdk = 26
         targetSdk = 35
-        versionCode = 19
-        versionName = "1.4.11"
+        versionCode = 20
+        versionName = "1.4.12"
     }
 
     // v19 以降の上書き用。マシンの ~/.android/debug.keystore は使わない。

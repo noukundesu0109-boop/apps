@@ -8,12 +8,12 @@ class DailyTabIconTest {
     @Test
     fun onlyTheDailyTabUsesTheCalendarIcon() {
         val html = File(repoRoot(), "task-app/index.html").readText()
-        assertTrue(html.contains("re.node;var ie=S(re)"))
+        assertTrue(html.contains("re.node;var ie=S(re),NichijoIcon=ie"))
         assertTrue(html.contains("name:`calendar-days`"))
         assertTrue(html.contains("Ne.node;var Pe=S(Ne)"))
         assertTrue(html.contains("name:`tag`"))
         assertTrue(
-            html.contains("n.tabs.map(e=>[e.id,e.name,e.kind===`car`?oe:e.id===`nichijo`||e.name===`日常`?ie:Pe])"),
+            html.contains("n.tabs.map(e=>[e.id,e.name,e.kind===`car`?oe:e.id===`nichijo`||e.name===`日常`?NichijoIcon:Pe])"),
         )
         assertTrue(html.contains("[`memo`,`メモ`,xe]"))
         assertTrue(html.contains("[`all`,`すべて`,ye]"))

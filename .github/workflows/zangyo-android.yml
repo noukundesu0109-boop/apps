@@ -39,6 +39,12 @@ jobs:
       - name: Test and build 就業
         working-directory: zangyo-android
         run: ./gradlew :alarm-core:test :app:assembleDebug --stacktrace
+      - name: Install Chrome for the task page test
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get update
+          sudo apt-get install -y /tmp/chrome.deb
       - name: Test and build タスク
         working-directory: task-android
         run: ./gradlew :alarm-core:test :app:assembleDebug --stacktrace
