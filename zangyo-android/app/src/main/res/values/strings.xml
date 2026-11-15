@@ -6,5 +6,7 @@
     <string name="next_channel_name">次のアラーム</string>
     <string name="next_channel_desc">次に鳴るアラームを、通知に出します</string>
     <string name="next_alarm_title">次のアラーム</string>
-    <string name="next_alarm_skip">次だけ解除</string>
+    <string name="next_alarm_cancel_snooze">スヌーズを解除</string>
+    <string name="fallback_channel_name">アラーム</string>
+    <string name="fallback_channel_desc">画面を出せなかったときのアラーム</string>
 </resources>

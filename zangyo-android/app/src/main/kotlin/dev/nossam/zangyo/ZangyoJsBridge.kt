@@ -14,6 +14,7 @@ class ZangyoJsBridge(
         fun saveToDrive(name: String, content: String)
         fun restoreFromDrive(phase: String)
         fun openPermissions()
+        fun openSetting(kind: String)
         fun requestNotifications()
     }
 
@@ -23,6 +24,12 @@ class ZangyoJsBridge(
     fun setAlarmSkipped(id: String, skipped: Boolean) {
         if (id.length > 400) return
         AlarmScheduler.enqueue { AlarmScheduler.setAlarmSkipped(appContext, id, skipped) }
+    }
+
+    @JavascriptInterface
+    fun cancelSnooze(id: String) {
+        if (id.length > 400) return
+        AlarmScheduler.enqueue { AlarmScheduler.cancelSnooze(appContext, id) }
     }
 
     @JavascriptInterface
@@ -51,6 +58,12 @@ class ZangyoJsBridge(
     @JavascriptInterface
     fun openPermissions() {
         main.post { ui.openPermissions() }
+    }
+
+    @JavascriptInterface
+    fun openSetting(kind: String) {
+        if (kind.length > 40) return
+        main.post { ui.openSetting(kind) }
     }
 
     @JavascriptInterface

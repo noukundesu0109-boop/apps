@@ -8,6 +8,8 @@ import android.os.Build
 import android.util.Log
 import dev.nossam.zangyo.plan.AlarmPlanner
 import dev.nossam.zangyo.plan.PlannedAlarm
+import dev.nossam.zangyo.plan.SnoozePlan
+import dev.nossam.zangyo.plan.SnoozeRecord
 import dev.nossam.zangyo.plan.WorkData
 import dev.nossam.zangyo.plan.parseWorkData
 import dev.nossam.zangyo.plan.plannedToJson
@@ -57,15 +59,34 @@ internal object AlarmScheduler {
         val schedule = synchronized(lock) {
             val store = AlarmStore(app)
             val at = AlarmPlanner.snoozeTrigger(System.currentTimeMillis())
-            val kept = store.readSnoozes().filter { it.atMillis > System.currentTimeMillis() + 5_000L }
-            store.writeSnoozes(
-                kept + StoredSnooze(
-                    id = UUID.randomUUID().toString(),
-                    atMillis = at,
-                    title = title.ifBlank { "アラーム" },
-                    detail = detail,
-                ),
+            val next = SnoozeRecord(
+                id = UUID.randomUUID().toString(),
+                atMillis = at,
+                title = title.ifBlank { "アラーム" },
+                detail = detail,
             )
+            store.writeSnoozes(SnoozePlan.replace(store.readSnoozes().map { it.toRecord() }, next).map { it.toStored() })
+            rebuild(app)
+        }
+        UiBridge.publishSchedule(schedule)
+    }
+
+    fun cancelSnooze(context: Context, id: String) {
+        if (id.isBlank() || id.length > 400) return
+        val app = context.applicationContext
+        val schedule = synchronized(lock) {
+            val store = AlarmStore(app)
+            store.writeSnoozes(SnoozePlan.cancel(store.readSnoozes().map { it.toRecord() }, id).map { it.toStored() })
+            rebuild(app)
+        }
+        UiBridge.publishSchedule(schedule)
+    }
+
+    fun cancelAllSnoozes(context: Context) {
+        val app = context.applicationContext
+        val schedule = synchronized(lock) {
+            val store = AlarmStore(app)
+            store.writeSnoozes(SnoozePlan.clear(store.readSnoozes().map { it.toRecord() }).map { it.toStored() })
             rebuild(app)
         }
         UiBridge.publishSchedule(schedule)
@@ -248,6 +269,10 @@ internal object AlarmScheduler {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
+
+    private fun StoredSnooze.toRecord() = SnoozeRecord(id, atMillis, title, detail)
+
+    private fun SnoozeRecord.toStored() = StoredSnooze(id, atMillis, title, detail)
 
     private fun maintenanceAt(now: ZonedDateTime): Long {
         var at = now.toLocalDate().atTime(0, 10).atZone(AlarmPlanner.ZONE)

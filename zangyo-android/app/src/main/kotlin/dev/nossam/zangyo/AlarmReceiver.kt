@@ -16,24 +16,39 @@ internal class AlarmReceiver : BroadcastReceiver() {
         val source = intent.getStringExtra(AlarmIntents.EXTRA_SOURCE)
         Thread {
             try {
-                if (action == AlarmIntents.ACTION_SKIP_NEXT) {
-                    val id = intent.getStringExtra(AlarmIntents.EXTRA_ID).orEmpty()
-                    if (id.startsWith("s|")) AlarmScheduler.setAlarmSkipped(app, id, true)
-                    else AlarmScheduler.reschedule(app)
-                } else {
-                AlarmScheduler.reschedule(app)
-                if (action == AlarmIntents.ACTION_FIRE) {
-                    val service = Intent(app, AlarmRingService::class.java).setAction(AlarmIntents.ACTION_FIRE).apply {
-                        putExtra(AlarmIntents.EXTRA_TITLE, title)
-                        putExtra(AlarmIntents.EXTRA_DETAIL, detail)
-                        putExtra(AlarmIntents.EXTRA_SOURCE, source)
+                when (action) {
+                    AlarmIntents.ACTION_SKIP_NEXT -> {
+                        val id = intent.getStringExtra(AlarmIntents.EXTRA_ID).orEmpty()
+                        if (id.startsWith("s|")) AlarmScheduler.setAlarmSkipped(app, id, true)
+                        else AlarmScheduler.reschedule(app)
                     }
-                    try {
-                        ContextCompat.startForegroundService(app, service)
-                    } catch (error: Exception) {
-                        Log.e(TAG, "could not start the ringing service", error)
+                    AlarmIntents.ACTION_CANCEL_SNOOZE -> {
+                        AlarmScheduler.cancelSnooze(app, intent.getStringExtra(AlarmIntents.EXTRA_ID).orEmpty())
                     }
-                }
+                    else -> {
+                        if (action == AlarmIntents.ACTION_FIRE) {
+                            AlarmRingService.markRinging()
+                            val service = Intent(app, AlarmRingService::class.java)
+                                .setAction(AlarmIntents.ACTION_FIRE)
+                                .apply {
+                                    putExtra(AlarmIntents.EXTRA_TITLE, title)
+                                    putExtra(AlarmIntents.EXTRA_DETAIL, detail)
+                                    putExtra(AlarmIntents.EXTRA_SOURCE, source)
+                                }
+                            try {
+                                ContextCompat.startForegroundService(app, service)
+                            } catch (error: Exception) {
+                                Log.e(TAG, "could not start the ringing service", error)
+                                AlarmRingService.clearRinging()
+                                AlarmFallbackNotice.show(app, title, detail)
+                            }
+                        }
+                        try {
+                            AlarmScheduler.reschedule(app)
+                        } catch (error: Exception) {
+                            Log.e(TAG, "could not reschedule alarms", error)
+                        }
+                    }
                 }
             } finally {
                 pending.finish()

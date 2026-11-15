@@ -13,8 +13,19 @@ android {
         applicationId = "dev.nossam.zangyo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "1.1.5"
+        versionCode = 17
+        versionName = "1.1.6"
+    }
+
+    // 入れ直し後の上書き用。マシンの ~/.android/debug.keystore は使わない。
+    signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file("signing/zangyo-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+            storeType = "PKCS12"
+        }
     }
 
     buildTypes {

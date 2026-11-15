@@ -208,6 +208,9 @@ object AlarmPlanner {
 
     fun nextAlarmNotice(alarm: PlannedAlarm): String = "次のアラーム ${nextAlarmText(alarm)}"
 
+    /** 「次の5:30を鳴らさない」 */
+    fun skipActionLabel(time: String): String = "次の${displayTime(time)}を鳴らさない"
+
     fun displayTime(hhmm: String): String {
         val parsed = parseTime(hhmm) ?: return hhmm
         return "${parsed.hour}:${parsed.minute.toString().padStart(2, '0')}"

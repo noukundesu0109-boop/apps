@@ -279,6 +279,7 @@ class AlarmPlannerTest {
     fun snoozeIsFiveMinutesLater() {
         assertEquals(1_000L + 5 * 60_000L, AlarmPlanner.snoozeTrigger(1_000L))
         assertEquals(5, AlarmPlanner.SNOOZE_MINUTES)
+        assertEquals("次の5:30を鳴らさない", AlarmPlanner.skipActionLabel("05:30"))
     }
 
     @Test

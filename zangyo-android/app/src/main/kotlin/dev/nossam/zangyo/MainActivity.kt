@@ -197,6 +197,10 @@ class MainActivity : AppCompatActivity(), ZangyoJsBridge.Ui {
         }
     }
 
+    override fun openSetting(kind: String) {
+        PermissionSettings.open(this, kind)
+    }
+
     override fun requestNotifications() {
         if (Build.VERSION.SDK_INT < 33 || PermissionGate.notificationsOk(this)) return
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return

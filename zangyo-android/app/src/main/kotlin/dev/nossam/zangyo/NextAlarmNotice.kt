@@ -73,17 +73,30 @@ internal object NextAlarmNotice {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(showTab(context))
             .setCategory(NotificationCompat.CATEGORY_STATUS)
-        if (alarm.id.startsWith("s|")) {
-            val skip = Intent(context, AlarmReceiver::class.java)
-                .setAction(AlarmIntents.ACTION_SKIP_NEXT)
-                .putExtra(AlarmIntents.EXTRA_ID, alarm.id)
-            val pending = PendingIntent.getBroadcast(
-                context,
-                AlarmIntents.NEXT_SKIP_REQUEST,
-                skip,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
-            builder.addAction(0, context.getString(R.string.next_alarm_skip), pending)
+        if (!AlarmRingService.isRinging()) {
+            if (alarm.source == "snooze" || alarm.id.startsWith("z|")) {
+                val cancel = Intent(context, AlarmReceiver::class.java)
+                    .setAction(AlarmIntents.ACTION_CANCEL_SNOOZE)
+                    .putExtra(AlarmIntents.EXTRA_ID, alarm.id)
+                val pending = PendingIntent.getBroadcast(
+                    context,
+                    AlarmIntents.NEXT_CANCEL_SNOOZE_REQUEST,
+                    cancel,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                builder.addAction(0, context.getString(R.string.next_alarm_cancel_snooze), pending)
+            } else if (alarm.id.startsWith("s|")) {
+                val skip = Intent(context, AlarmReceiver::class.java)
+                    .setAction(AlarmIntents.ACTION_SKIP_NEXT)
+                    .putExtra(AlarmIntents.EXTRA_ID, alarm.id)
+                val pending = PendingIntent.getBroadcast(
+                    context,
+                    AlarmIntents.NEXT_SKIP_REQUEST,
+                    skip,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                builder.addAction(0, AlarmPlanner.skipActionLabel(alarm.time), pending)
+            }
         }
         return builder.build()
     }

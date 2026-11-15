@@ -33,6 +33,7 @@ class AlarmRingService : Service() {
         when (intent?.action) {
             AlarmIntents.ACTION_DISMISS -> {
                 stopRinging()
+                AlarmScheduler.cancelAllSnoozes(this)
                 return START_NOT_STICKY
             }
             AlarmIntents.ACTION_SNOOZE -> {
@@ -184,8 +185,13 @@ class AlarmRingService : Service() {
     private fun stopRinging() {
         releaseSound()
         ringing.set(false)
+        closeScreen()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun closeScreen() {
+        sendBroadcast(Intent(AlarmIntents.ACTION_CLOSE).setPackage(packageName))
     }
 
     private fun releaseSound() {
@@ -219,5 +225,13 @@ class AlarmRingService : Service() {
         private val ringing = AtomicBoolean(false)
 
         fun isRinging(): Boolean = ringing.get()
+
+        fun markRinging() {
+            ringing.set(true)
+        }
+
+        fun clearRinging() {
+            ringing.set(false)
+        }
     }
 }

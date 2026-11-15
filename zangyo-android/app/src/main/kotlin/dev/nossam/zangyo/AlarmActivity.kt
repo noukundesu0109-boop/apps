@@ -1,6 +1,9 @@
 package dev.nossam.zangyo
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
@@ -24,6 +27,11 @@ class AlarmActivity : AppCompatActivity() {
     }
     private var titleText = "アラーム"
     private var detailText = ""
+    private val closeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            finish()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,11 +73,22 @@ class AlarmActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        val filter = IntentFilter(AlarmIntents.ACTION_CLOSE)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(closeReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(closeReceiver, filter)
+        }
         clock.post(tick)
     }
 
     override fun onStop() {
         clock.removeCallbacks(tick)
+        try {
+            unregisterReceiver(closeReceiver)
+        } catch (_: Exception) {
+        }
         super.onStop()
     }
 

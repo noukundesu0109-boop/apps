@@ -74,6 +74,7 @@
     ".za-next li.za-skipped,.za-next li.za-skipped b,.za-next li.za-skipped span{color:#9a948a}",
     ".za-skip{border:0;background:transparent;color:#1f5c45;font-size:14px;padding:8px 4px;min-width:44px;font-weight:700}",
     ".za-warn{background:#fde8e6;color:#b42318;border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.5;margin:0 0 12px}",
+    ".za-warn button{display:block;margin-top:8px;border:0;background:#b42318;color:#fff;border-radius:999px;padding:8px 12px;font-size:14px;font-weight:700}",
     ".za-ok{background:#e7f1eb;color:#1f5c45;border-radius:10px;padding:10px 12px;font-size:14px;margin:0 0 12px}",
     ".za-msg{min-height:1.2em;color:#b42318;font-size:14px;margin:8px 0 0}",
     "label.za-field{display:block;margin:10px 0;font-size:14px;color:#6f675c}",
@@ -215,15 +216,19 @@
     });
   }
 
+  function warnRow(text, kind, label) {
+    return '<p class="za-warn">' + esc(text) +
+      '<button type="button" data-act="open-setting" data-setting="' + kind + '">' + esc(label) + "</button></p>";
+  }
   function permHtml() {
     if (!perm) return "";
-    var missing = [];
-    if (!perm.notifications) missing.push("通知");
-    if (!perm.fullScreen) missing.push("ロック画面");
-    if (!perm.exact) missing.push("時刻どおり");
-    if (!perm.battery) missing.push("バッテリー");
-    if (!missing.length) return '<p class="za-ok">スマホの許可はそろっています。</p>';
-    return '<p class="za-warn">まだオフです: ' + esc(missing.join("、")) + "。下の「スマホの許可を確認」を押してください。</p>";
+    var rows = [];
+    if (perm.exact === false) rows.push(warnRow("時刻どおりのアラームが許可されていません。", "exact", "時刻の設定を開く"));
+    if (perm.battery === false) rows.push(warnRow("バッテリーが制限されています。鳴らないことがあります。", "battery", "バッテリーの設定を開く"));
+    if (perm.fullScreen === false) rows.push(warnRow("ロック画面に表示できません。", "fullscreen", "ロック画面の設定を開く"));
+    if (perm.notifications === false) rows.push(warnRow("通知がオフです。", "notifications", "通知の設定を開く"));
+    if (!rows.length) return '<p class="za-ok">スマホの許可はそろっています。</p>';
+    return rows.join("");
   }
 
   function readNotice() {
@@ -249,16 +254,18 @@
     if (!items.length) return head + '<p class="za-muted">この先、鳴る予定はありません。休日と年休の日は鳴りません。</p>';
     var rows = items.map(function (item) {
       var skipped = !!item.skipped;
-      var button = item.source === "snooze" ? "" : (
-        skipped
-          ? '<button type="button" class="za-skip" data-act="restore-alarm" data-id="' + esc(item.id) + '">戻す</button>'
-          : '<button type="button" class="za-skip" data-act="skip-alarm" data-id="' + esc(item.id) + '">解除</button>'
-      );
+      var button = item.source === "snooze"
+        ? '<button type="button" class="za-skip" data-act="cancel-snooze" data-id="' + esc(item.id) + '">スヌーズを解除</button>'
+        : (
+          skipped
+            ? '<button type="button" class="za-skip" data-act="restore-alarm" data-id="' + esc(item.id) + '">戻す</button>'
+            : '<button type="button" class="za-skip" data-act="skip-alarm" data-id="' + esc(item.id) + '">この回は鳴らさない</button>'
+        );
       return '<li class="' + (skipped ? "za-skipped" : "") + '"><b>' + esc(item.time) + "</b> " + esc(item.title) + "<span>" + esc(item.detail) + "</span>" + button + "</li>";
     }).join("");
     var days = schedule.horizonDays || 21;
     return head + '<ul class="za-next">' + rows + "</ul>" +
-      '<p class="za-muted">勤務のアラームは今から' + days + "日分です。オフの時刻は鳴りません。解除した予定は灰色のまま残ります。「戻す」で再び鳴ります。その日の勤務の種類を変えると、その日の解除は消えます。この日だけのアラームを入れた日は、その時刻が優先されます。</p>";
+      '<p class="za-muted">勤務のアラームは今から' + days + "日分です。オフの時刻は鳴りません。「この回は鳴らさない」にした予定は灰色のまま残ります。「戻す」で再び鳴ります。その日の勤務の種類を変えると、その日の設定は消えます。スヌーズは「スヌーズを解除」で消せます。この日だけのアラームを入れた日は、その時刻が優先されます。</p>";
   }
 
   function refreshBits() {
@@ -448,6 +455,14 @@
     var act = target.dataset.act;
     if (act === "perm") {
       if (window.ZangyoNative && ZangyoNative.openPermissions) ZangyoNative.openPermissions();
+      return;
+    }
+    if (act === "open-setting") {
+      if (window.ZangyoNative && ZangyoNative.openSetting) ZangyoNative.openSetting(target.dataset.setting || "");
+      return;
+    }
+    if (act === "cancel-snooze") {
+      if (window.ZangyoNative && ZangyoNative.cancelSnooze) ZangyoNative.cancelSnooze(target.dataset.id || "");
       return;
     }
     if (act === "skip-alarm" || act === "restore-alarm") {
