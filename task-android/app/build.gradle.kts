@@ -17,6 +17,17 @@ android {
         versionName = "1.4.11"
     }
 
+    // v19 以降の上書き用。マシンの ~/.android/debug.keystore は使わない。
+    signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file("signing/task-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+            storeType = "PKCS12"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
