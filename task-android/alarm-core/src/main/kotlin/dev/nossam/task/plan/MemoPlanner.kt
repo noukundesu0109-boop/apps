@@ -292,6 +292,81 @@ object MemoPlanner {
         itemsOn(board, iso).filter { !it.done }
 
     /**
+     * Home-screen list. Timed items stay from the start of today through now+24h,
+     * so earlier today still shows and tomorrow is included up to the same clock time.
+     * Untimed items count as 0:00 and show from 0:00 the day before through that day.
+     */
+    fun widgetWindow(board: TaskBoard, now: ZonedDateTime): List<WidgetEntry> {
+        val nowZ = now.withZoneSameInstant(ZONE)
+        val today = nowZ.toLocalDate()
+        val tomorrow = today.plusDays(1)
+        val entries = ArrayList<WidgetEntry>()
+        for (offset in 0L..1L) {
+            val date = today.plusDays(offset)
+            for (item in itemsOn(board, date.toString())) {
+                if (item.done || !inWidgetWindow(date, item.time, nowZ)) continue
+                val clock = item.time?.takeIf { parseTime(it) != null }
+                val at = date.atTime(parseTime(clock) ?: LocalTime.MIDNIGHT).atZone(ZONE)
+                val isTomorrow = date == tomorrow
+                entries += WidgetEntry(
+                    item = item,
+                    date = date,
+                    at = at,
+                    timeText = if (isTomorrow) "" else clock.orEmpty(),
+                    titleText = when {
+                        isTomorrow && clock != null -> "明日 $clock ${item.title}"
+                        isTomorrow -> "明日 ${item.title}"
+                        else -> item.title
+                    },
+                )
+            }
+        }
+        return entries.sortedWith(
+            compareBy<WidgetEntry> { it.at.toInstant() }
+                .thenBy { it.item.title }
+                .thenBy { it.item.kind }
+                .thenBy { it.item.id },
+        )
+    }
+
+    /** Next redraw: the next entry or exit, midnight, and never later than one hour. */
+    fun nextWidgetRefresh(board: TaskBoard, now: ZonedDateTime): ZonedDateTime {
+        val nowZ = now.withZoneSameInstant(ZONE)
+        var next = nowZ.plusHours(1)
+        fun consider(at: ZonedDateTime) {
+            if (at.isAfter(nowZ) && at.isBefore(next)) next = at
+        }
+        consider(nowZ.toLocalDate().plusDays(1).atStartOfDay(ZONE))
+        val today = nowZ.toLocalDate()
+        for (offset in -1L..2L) {
+            val date = today.plusDays(offset)
+            for (item in itemsOn(board, date.toString())) {
+                if (item.done) continue
+                val time = parseTime(item.time)
+                if (time != null) {
+                    consider(date.atTime(time).atZone(ZONE).minusHours(24))
+                    consider(date.plusDays(1).atStartOfDay(ZONE))
+                } else {
+                    consider(date.minusDays(1).atStartOfDay(ZONE))
+                    consider(date.plusDays(1).atStartOfDay(ZONE))
+                }
+            }
+        }
+        return next
+    }
+
+    private fun inWidgetWindow(date: LocalDate, timeText: String?, nowZ: ZonedDateTime): Boolean {
+        val time = parseTime(timeText)
+        return if (time != null) {
+            val at = date.atTime(time).atZone(ZONE)
+            !at.isBefore(nowZ.toLocalDate().atStartOfDay(ZONE)) && !at.isAfter(nowZ.plusHours(24))
+        } else {
+            !nowZ.isBefore(date.minusDays(1).atStartOfDay(ZONE)) &&
+                nowZ.isBefore(date.plusDays(1).atStartOfDay(ZONE))
+        }
+    }
+
+    /**
      * Full-screen alarms. Memos ring by default. Other tabs ring only when that
      * tab is switched on and the item has a time. The date is the postponed one
      * when this occurrence was moved.
@@ -548,6 +623,14 @@ data class ExtraEntry(
     val due: String? = null,
     val series: String? = null,
     val sound: Boolean = true,
+)
+
+data class WidgetEntry(
+    val item: DayItem,
+    val date: LocalDate,
+    val at: ZonedDateTime,
+    val timeText: String,
+    val titleText: String,
 )
 
 data class DayItem(

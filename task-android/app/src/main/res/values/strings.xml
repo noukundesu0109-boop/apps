@@ -16,9 +16,9 @@
     <string name="quiet_channel_desc">音をオフにした日常の予定を、音なしで知らせます</string>
     <string name="voice_label">声でメモ</string>
     <string name="voice_widget_desc">話して予定を入れます</string>
-    <string name="today_widget_label">今日の予定</string>
-    <string name="today_widget_desc">今日の予定を一覧し、チェックで済みにします</string>
-    <string name="today_widget_empty">今日の予定はありません</string>
+    <string name="today_widget_label">24時間の予定</string>
+    <string name="today_widget_desc">これから24時間の予定を一覧し、チェックで済みにします</string>
+    <string name="today_widget_empty">24時間の予定はありません</string>
     <string name="today_widget_add">声でメモ</string>
     <string name="voice_prompt">予定を話してください</string>
     <string name="voice_capture_wait">聞いています。ゆっくり話してください。</string>
