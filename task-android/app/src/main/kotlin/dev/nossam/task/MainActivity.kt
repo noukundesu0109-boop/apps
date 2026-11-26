@@ -130,6 +130,7 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
                 deliver("window.__taskPermStatus", PermissionGate.statusJson(this@MainActivity))
                 UiBridge.lastSchedule?.let { deliver("window.__taskShowSchedule", it) }
                 flushDone()
+                flushMoves()
                 maybeStartVoice()
             }
         }
@@ -195,6 +196,7 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         UiBridge.scheduleSink = scheduleSink
         UiBridge.permissionSink = permissionSink
         UiBridge.doneSink = doneSink
+        UiBridge.moveSink = moveSink
         onBackPressedDispatcher.addCallback(
             this,
             object : OnBackPressedCallback(true) {
@@ -622,6 +624,7 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
     override fun onResume() {
         super.onResume()
         deliver("window.__taskPermStatus", PermissionGate.statusJson(this))
+        flushMoves()
         if (!guideShown && PermissionGate.needsPrompt(this)) {
             guideShown = true
             startActivity(Intent(this, PermissionActivity::class.java))
@@ -636,6 +639,9 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
     }
     private val doneSink: (String) -> Unit = { json ->
         runOnUiThread { deliver("window.__taskMarkDone", json) }
+    }
+    private val moveSink: (String) -> Unit = { json ->
+        runOnUiThread { deliverMove(json) }
     }
 
     private fun flushDone(attempt: Int = 0) {
@@ -655,6 +661,34 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         webView.postDelayed({ flushDone(attempt + 1) }, 400)
     }
 
+    private fun flushMoves() {
+        if (!pageReady || !::webView.isInitialized) return
+        for (item in AlarmStore(applicationContext).readPendingMoves()) {
+            deliverMove(
+                org.json.JSONObject()
+                    .put("kind", item.kind)
+                    .put("id", item.id)
+                    .put("tabId", item.tabId)
+                    .put("date", item.date)
+                    .toString(),
+            )
+        }
+    }
+
+    private fun deliverMove(json: String) {
+        if (!::webView.isInitialized) return
+        val obj = try {
+            org.json.JSONObject(json)
+        } catch (_: Exception) {
+            return
+        }
+        val kind = org.json.JSONObject.quote(obj.optString("kind"))
+        val id = org.json.JSONObject.quote(obj.optString("id"))
+        val tab = org.json.JSONObject.quote(obj.optString("tabId"))
+        val date = org.json.JSONObject.quote(obj.optString("date"))
+        webView.evaluateJavascript("window.__taskShift&&window.__taskShift($kind,$id,$tab,$date)", null)
+    }
+
     override fun onDestroy() {
         commandToken += 1
         voiceHandler.removeCallbacksAndMessages(null)
@@ -666,6 +700,7 @@ class MainActivity : AppCompatActivity(), TaskJsBridge.Ui {
         if (UiBridge.scheduleSink === scheduleSink) UiBridge.scheduleSink = null
         if (UiBridge.permissionSink === permissionSink) UiBridge.permissionSink = null
         if (UiBridge.doneSink === doneSink) UiBridge.doneSink = null
+        if (UiBridge.moveSink === moveSink) UiBridge.moveSink = null
         webView.destroy()
         super.onDestroy()
     }

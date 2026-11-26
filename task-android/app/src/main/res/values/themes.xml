@@ -10,6 +10,13 @@
         <item name="android:textColor">@color/ink</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
+    <style name="Theme.Task.Move" parent="Theme.AppCompat.Light.Dialog">
+        <item name="colorPrimary">@color/forest</item>
+        <item name="colorAccent">@color/forest</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="windowNoTitle">true</item>
+    </style>
     <style name="Theme.Task.Alarm" parent="Theme.Task">
         <item name="android:statusBarColor">@color/paper</item>
         <item name="android:navigationBarColor">@color/paper</item>

@@ -292,34 +292,19 @@ object MemoPlanner {
         itemsOn(board, iso).filter { !it.done }
 
     /**
-     * Home-screen list. Timed items stay from the start of today through now+24h,
-     * so earlier today still shows and tomorrow is included up to the same clock time.
-     * Untimed items count as 0:00 and show from 0:00 the day before through that day.
+     * Home-screen list. Not-done items from today through the end of the 7th day,
+     * plus older not-done items. An item without a time counts as 0:00 that day.
      */
     fun widgetWindow(board: TaskBoard, now: ZonedDateTime): List<WidgetEntry> {
-        val nowZ = now.withZoneSameInstant(ZONE)
-        val today = nowZ.toLocalDate()
-        val tomorrow = today.plusDays(1)
+        val today = now.withZoneSameInstant(ZONE).toLocalDate()
+        val last = today.plusDays(6)
         val entries = ArrayList<WidgetEntry>()
-        for (offset in 0L..1L) {
-            val date = today.plusDays(offset)
-            for (item in itemsOn(board, date.toString())) {
-                if (item.done || !inWidgetWindow(date, item.time, nowZ)) continue
-                val clock = item.time?.takeIf { parseTime(it) != null }
-                val at = date.atTime(parseTime(clock) ?: LocalTime.MIDNIGHT).atZone(ZONE)
-                val isTomorrow = date == tomorrow
-                entries += WidgetEntry(
-                    item = item,
-                    date = date,
-                    at = at,
-                    timeText = if (isTomorrow) "" else clock.orEmpty(),
-                    titleText = when {
-                        isTomorrow && clock != null -> "明日 $clock ${item.title}"
-                        isTomorrow -> "明日 ${item.title}"
-                        else -> item.title
-                    },
-                )
-            }
+        eachDated(board) { date, item ->
+            if (item.done || date.isAfter(last)) return@eachDated
+            val clock = item.time?.takeIf { parseTime(it) != null }
+            val at = date.atTime(parseTime(clock) ?: LocalTime.MIDNIGHT).atZone(ZONE)
+            val name = if (item.kind == KIND_MEMO || item.label.isBlank()) item.title else "${item.label} ${item.title}"
+            entries += WidgetEntry(item, date, at, clock.orEmpty(), name)
         }
         return entries.sortedWith(
             compareBy<WidgetEntry> { it.at.toInstant() }
@@ -329,40 +314,58 @@ object MemoPlanner {
         )
     }
 
-    /** Next redraw: the next entry or exit, midnight, and never later than one hour. */
-    fun nextWidgetRefresh(board: TaskBoard, now: ZonedDateTime): ZonedDateTime {
-        val nowZ = now.withZoneSameInstant(ZONE)
-        var next = nowZ.plusHours(1)
-        fun consider(at: ZonedDateTime) {
-            if (at.isAfter(nowZ) && at.isBefore(next)) next = at
-        }
-        consider(nowZ.toLocalDate().plusDays(1).atStartOfDay(ZONE))
-        val today = nowZ.toLocalDate()
-        for (offset in -1L..2L) {
-            val date = today.plusDays(offset)
-            for (item in itemsOn(board, date.toString())) {
-                if (item.done) continue
-                val time = parseTime(item.time)
-                if (time != null) {
-                    consider(date.atTime(time).atZone(ZONE).minusHours(24))
-                    consider(date.plusDays(1).atStartOfDay(ZONE))
-                } else {
-                    consider(date.minusDays(1).atStartOfDay(ZONE))
-                    consider(date.plusDays(1).atStartOfDay(ZONE))
-                }
+    fun widgetRows(board: TaskBoard, now: ZonedDateTime): List<WidgetRow> {
+        val today = now.withZoneSameInstant(ZONE).toLocalDate()
+        val rows = ArrayList<WidgetRow>()
+        var shown: LocalDate? = null
+        for (entry in widgetWindow(board, now)) {
+            if (entry.date != shown) {
+                rows += WidgetRow.Header(widgetDateLabel(entry.date, today))
+                shown = entry.date
             }
+            rows += WidgetRow.Item(entry)
         }
-        return next
+        return rows
     }
 
-    private fun inWidgetWindow(date: LocalDate, timeText: String?, nowZ: ZonedDateTime): Boolean {
-        val time = parseTime(timeText)
-        return if (time != null) {
-            val at = date.atTime(time).atZone(ZONE)
-            !at.isBefore(nowZ.toLocalDate().atStartOfDay(ZONE)) && !at.isAfter(nowZ.plusHours(24))
-        } else {
-            !nowZ.isBefore(date.minusDays(1).atStartOfDay(ZONE)) &&
-                nowZ.isBefore(date.plusDays(1).atStartOfDay(ZONE))
+    fun widgetDateLabel(date: LocalDate, today: LocalDate): String = when (date) {
+        today -> "今日"
+        today.plusDays(1) -> "明日"
+        else -> {
+            val dow = listOf("月", "火", "水", "木", "金", "土", "日")[date.dayOfWeek.value - 1]
+            "${date.monthValue}/${date.dayOfMonth}($dow)"
+        }
+    }
+
+    /** Next redraw: midnight, when the week window slides, and never later than one hour. */
+    fun nextWidgetRefresh(board: TaskBoard, now: ZonedDateTime): ZonedDateTime {
+        val nowZ = now.withZoneSameInstant(ZONE)
+        val hour = nowZ.plusHours(1)
+        val midnight = nowZ.toLocalDate().plusDays(1).atStartOfDay(ZONE)
+        val soon = if (midnight.isBefore(hour)) midnight else hour
+        return if (widgetWindow(board, nowZ).isEmpty()) soon else soon
+    }
+
+    private fun eachDated(board: TaskBoard, block: (LocalDate, DayItem) -> Unit) {
+        for (memo in board.memos) {
+            val date = parseDate(memo.due) ?: continue
+            block(date, DayItem(KIND_MEMO, memo.id, memo.text, time = memo.time, done = memo.done, label = "メモ"))
+        }
+        for (item in board.cleaning) {
+            val date = shownDate(nextCleanDate(item.done, item.cycle), item.shift) ?: continue
+            block(date, DayItem(KIND_CLEAN, item.id, item.title, time = item.time, tabId = "clean", label = "掃除", shifted = parseDate(item.shift) != null))
+        }
+        for (item in board.bousai) {
+            val date = shownDate(parseDate(item.due), item.shift) ?: continue
+            block(date, DayItem(KIND_BOUSAI, item.id, item.title, time = item.time, tabId = "bousai", label = "防災", shifted = parseDate(item.shift) != null))
+        }
+        for (item in board.cars) {
+            val date = shownDate(nextCarDate(item.done, item.months), item.shift) ?: continue
+            block(date, DayItem(KIND_CAR, item.id, item.title, time = item.time, tabId = item.tabId, label = "車", shifted = parseDate(item.shift) != null))
+        }
+        for (item in board.extras) {
+            val date = shownDate(extraNatural(item), item.shift) ?: continue
+            block(date, DayItem(extraKind(item.tabId), item.id, item.title, time = item.time, tabId = item.tabId, label = item.tabName, shifted = parseDate(item.shift) != null))
         }
     }
 
@@ -625,6 +628,11 @@ data class ExtraEntry(
     val sound: Boolean = true,
 )
 
+sealed class WidgetRow {
+    data class Header(val label: String) : WidgetRow()
+    data class Item(val entry: WidgetEntry) : WidgetRow()
+}
+
 data class WidgetEntry(
     val item: DayItem,
     val date: LocalDate,
@@ -811,6 +819,163 @@ private fun readLead(raw: Any?): Int? {
         else -> null
     } ?: return null
     return number.takeIf { it in MemoPlanner.LEAD_CHOICES }
+}
+
+data class PendingMove(
+    val kind: String,
+    val id: String,
+    val tabId: String = "",
+    val date: String,
+)
+
+data class MoveMergeResult(
+    val json: String,
+    val stillPending: List<PendingMove>,
+)
+
+/**
+ * Keeps a widget date change until the screen stores the same date.
+ * A move already visible in [json], or an item the screen has deleted, is dropped.
+ */
+fun mergePendingMoves(json: String, pending: List<PendingMove>): MoveMergeResult {
+    if (pending.isEmpty()) return MoveMergeResult(json, emptyList())
+    try {
+        JSONObject(json)
+    } catch (_: Exception) {
+        return MoveMergeResult(json, pending)
+    }
+    var current = json
+    val still = ArrayList<PendingMove>()
+    for (move in pending) {
+        if (MemoPlanner.parseDate(move.date) == null || move.id.isBlank() || move.kind.isBlank()) {
+            still += move
+            continue
+        }
+        when (moveState(current, move)) {
+            MoveState.Reflected, MoveState.Missing, MoveState.Finished -> Unit
+            MoveState.Open -> {
+                current = moveOccurrence(current, move.kind, move.id, move.tabId, move.date)
+                still += move
+            }
+        }
+    }
+    return MoveMergeResult(current, still)
+}
+
+private enum class MoveState { Reflected, Missing, Finished, Open }
+
+private fun moveState(json: String, move: PendingMove): MoveState {
+    val root = try {
+        JSONObject(json)
+    } catch (_: Exception) {
+        return MoveState.Open
+    }
+    return when (move.kind) {
+        MemoPlanner.KIND_MEMO -> memoMove(root.optJSONArray("memos"), move.id, move.date)
+        MemoPlanner.KIND_CLEAN -> shiftMove(root.optJSONArray("cleaning"), move.id, move.date, finished = false)
+        MemoPlanner.KIND_BOUSAI -> bousaiMove(root.optJSONArray("bousai"), move.id, move.date)
+        else -> tabMove(root.optJSONArray("tabs"), move.id, move.tabId, move.date)
+    }
+}
+
+private fun memoMove(array: JSONArray?, itemId: String, date: String): MoveState {
+    if (array == null) return MoveState.Open
+    for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        if (item.optString("id") != itemId) continue
+        if (MemoPlanner.parseDate(item.optString("done")) != null) return MoveState.Finished
+        return if (item.optString("due") == date) MoveState.Reflected else MoveState.Open
+    }
+    return MoveState.Missing
+}
+
+private fun shiftMove(array: JSONArray?, itemId: String, date: String, finished: Boolean): MoveState {
+    if (array == null) return MoveState.Open
+    for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        if (item.optString("id") != itemId) continue
+        if (finished) return MoveState.Finished
+        return if (item.optString("shift") == date) MoveState.Reflected else MoveState.Open
+    }
+    return MoveState.Missing
+}
+
+private fun bousaiMove(array: JSONArray?, itemId: String, date: String): MoveState {
+    if (array == null) return MoveState.Open
+    for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        if (item.optString("id") != itemId) continue
+        val clear = MemoPlanner.parseDate(item.optString("due")) == null &&
+            MemoPlanner.parseDate(item.optString("shift")) == null
+        if (clear) return MoveState.Finished
+        return if (item.optString("shift") == date) MoveState.Reflected else MoveState.Open
+    }
+    return MoveState.Missing
+}
+
+private fun tabMove(tabs: JSONArray?, itemId: String, tabId: String, date: String): MoveState {
+    if (tabs == null) return MoveState.Open
+    var tabFound = tabId.isBlank()
+    for (t in 0 until tabs.length()) {
+        val tab = tabs.optJSONObject(t) ?: continue
+        if (tabId.isNotBlank() && tab.optString("id") != tabId) continue
+        tabFound = true
+        val items = tab.optJSONArray("items") ?: return MoveState.Open
+        for (i in 0 until items.length()) {
+            val item = items.optJSONObject(i) ?: continue
+            if (item.optString("id") != itemId) continue
+            return if (item.optString("shift") == date) MoveState.Reflected else MoveState.Open
+        }
+    }
+    return if (tabFound) MoveState.Missing else MoveState.Open
+}
+
+fun moveOccurrence(json: String, kind: String, itemId: String, tabId: String, date: String): String {
+    if (MemoPlanner.parseDate(date) == null || itemId.isBlank()) return json
+    val root = try {
+        JSONObject(json)
+    } catch (_: Exception) {
+        return json
+    }
+    when (kind) {
+        MemoPlanner.KIND_MEMO -> setMemoDue(root.optJSONArray("memos"), itemId, date)
+        MemoPlanner.KIND_CLEAN -> setShift(root.optJSONArray("cleaning"), itemId, date)
+        MemoPlanner.KIND_BOUSAI -> setShift(root.optJSONArray("bousai"), itemId, date)
+        else -> setTabShift(root.optJSONArray("tabs"), itemId, tabId, date)
+    }
+    return root.toString()
+}
+
+private fun setMemoDue(array: JSONArray?, itemId: String, date: String) {
+    if (array == null) return
+    for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        if (item.optString("id") != itemId) continue
+        item.put("due", date)
+    }
+}
+
+private fun setShift(array: JSONArray?, itemId: String, date: String) {
+    if (array == null) return
+    for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        if (item.optString("id") != itemId) continue
+        item.put("shift", date)
+    }
+}
+
+private fun setTabShift(tabs: JSONArray?, itemId: String, tabId: String, date: String) {
+    if (tabs == null) return
+    for (t in 0 until tabs.length()) {
+        val tab = tabs.optJSONObject(t) ?: continue
+        if (tabId.isNotBlank() && tab.optString("id") != tabId) continue
+        val items = tab.optJSONArray("items") ?: continue
+        for (i in 0 until items.length()) {
+            val item = items.optJSONObject(i) ?: continue
+            if (item.optString("id") != itemId) continue
+            item.put("shift", date)
+        }
+    }
 }
 
 data class PendingCompletion(

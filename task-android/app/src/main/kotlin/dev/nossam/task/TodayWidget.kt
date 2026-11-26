@@ -11,7 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.widget.RemoteViews
 import dev.nossam.task.plan.MemoPlanner
-import dev.nossam.task.plan.WidgetEntry
+import dev.nossam.task.plan.WidgetRow
 import dev.nossam.task.plan.parseBoard
 import java.time.ZonedDateTime
 
@@ -27,9 +27,20 @@ class TodayWidget : AppWidgetProvider() {
                 val itemId = intent.getStringExtra(AlarmIntents.EXTRA_ITEM).orEmpty()
                 val tabId = intent.getStringExtra(AlarmIntents.EXTRA_TAB).orEmpty()
                 if (kind.isNotBlank() && itemId.isNotBlank()) {
-                    TaskAlarms.complete(context, kind, itemId, tabId)
+                    if (intent.getStringExtra(EXTRA_OP) == OP_MOVE) {
+                        context.startActivity(
+                            Intent(context, MoveDateActivity::class.java)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                .putExtra(AlarmIntents.EXTRA_KIND, kind)
+                                .putExtra(AlarmIntents.EXTRA_ITEM, itemId)
+                                .putExtra(AlarmIntents.EXTRA_TAB, tabId)
+                                .putExtra(AlarmIntents.EXTRA_TITLE, intent.getStringExtra(AlarmIntents.EXTRA_TITLE).orEmpty()),
+                        )
+                    } else {
+                        TaskAlarms.complete(context, kind, itemId, tabId)
+                        updateAll(context)
+                    }
                 }
-                updateAll(context)
                 return
             }
             ACTION_REFRESH -> {
@@ -48,6 +59,9 @@ class TodayWidget : AppWidgetProvider() {
     companion object {
         const val ACTION_CHECK = "dev.nossam.task.action.WIDGET_CHECK"
         const val ACTION_REFRESH = "dev.nossam.task.action.WIDGET_REFRESH"
+        const val EXTRA_OP = "op"
+        const val OP_MOVE = "move"
+        const val OP_CHECK = "check"
 
         fun updateAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
@@ -143,56 +157,85 @@ class TodayWidgetService : android.widget.RemoteViewsService() {
 private class TodayWidgetFactory(
     private val context: Context,
 ) : android.widget.RemoteViewsService.RemoteViewsFactory {
-    private var items: List<WidgetEntry> = emptyList()
+    private var rows: List<WidgetRow> = emptyList()
 
     override fun onCreate() {}
 
     override fun onDataSetChanged() {
-        items = loadWindow(context)
+        rows = loadWindow(context)
     }
 
     override fun onDestroy() {
-        items = emptyList()
+        rows = emptyList()
     }
 
-    override fun getCount(): Int = items.size
+    override fun getCount(): Int = rows.size
+
+    override fun getViewTypeCount(): Int = 1
 
     override fun getViewAt(position: Int): RemoteViews {
-        val item = items.getOrNull(position)
         val views = RemoteViews(context.packageName, R.layout.widget_today_item)
-        if (item == null) return views
-        views.setTextViewText(R.id.widget_item_time, item.timeText)
+        when (val row = rows.getOrNull(position)) {
+            is WidgetRow.Header -> {
+                views.setViewVisibility(R.id.widget_section, android.view.View.VISIBLE)
+                views.setTextViewText(R.id.widget_section, row.label)
+                views.setViewVisibility(R.id.widget_item_check, android.view.View.GONE)
+                views.setViewVisibility(R.id.widget_item_time, android.view.View.GONE)
+                views.setViewVisibility(R.id.widget_item_title, android.view.View.GONE)
+            }
+            is WidgetRow.Item -> itemView(views, row)
+            null -> Unit
+        }
+        return views
+    }
+
+    private fun itemView(views: RemoteViews, row: WidgetRow.Item): RemoteViews {
+        val entry = row.entry
+        views.setViewVisibility(R.id.widget_section, android.view.View.GONE)
+        views.setViewVisibility(R.id.widget_item_check, android.view.View.VISIBLE)
+        views.setViewVisibility(R.id.widget_item_title, android.view.View.VISIBLE)
+        views.setTextViewText(R.id.widget_item_time, entry.timeText)
         views.setViewVisibility(
             R.id.widget_item_time,
-            if (item.timeText.isBlank()) android.view.View.GONE else android.view.View.VISIBLE,
+            if (entry.timeText.isBlank()) android.view.View.GONE else android.view.View.VISIBLE,
         )
-        views.setTextViewText(R.id.widget_item_title, item.titleText)
-        val fill = Intent().apply {
-            putExtra(AlarmIntents.EXTRA_KIND, item.item.kind)
-            putExtra(AlarmIntents.EXTRA_ITEM, item.item.id)
-            putExtra(AlarmIntents.EXTRA_TAB, item.item.tabId.orEmpty())
+        views.setTextViewText(R.id.widget_item_title, entry.titleText)
+        val check = Intent().apply {
+            putExtra(TodayWidget.EXTRA_OP, TodayWidget.OP_CHECK)
+            putExtra(AlarmIntents.EXTRA_KIND, entry.item.kind)
+            putExtra(AlarmIntents.EXTRA_ITEM, entry.item.id)
+            putExtra(AlarmIntents.EXTRA_TAB, entry.item.tabId.orEmpty())
         }
-        views.setOnClickFillInIntent(R.id.widget_item_check, fill)
-        views.setOnClickFillInIntent(R.id.widget_item_row, fill)
+        val move = Intent().apply {
+            putExtra(TodayWidget.EXTRA_OP, TodayWidget.OP_MOVE)
+            putExtra(AlarmIntents.EXTRA_KIND, entry.item.kind)
+            putExtra(AlarmIntents.EXTRA_ITEM, entry.item.id)
+            putExtra(AlarmIntents.EXTRA_TAB, entry.item.tabId.orEmpty())
+            putExtra(AlarmIntents.EXTRA_TITLE, entry.item.title)
+        }
+        views.setOnClickFillInIntent(R.id.widget_item_check, check)
+        views.setOnClickFillInIntent(R.id.widget_item_title, move)
+        views.setOnClickFillInIntent(R.id.widget_item_time, move)
         return views
     }
 
     override fun getLoadingView(): RemoteViews? = null
 
-    override fun getViewTypeCount(): Int = 1
-
-    override fun getItemId(position: Int): Long =
-        items.getOrNull(position)?.item?.id?.hashCode()?.toLong() ?: position.toLong()
+    override fun getItemId(position: Int): Long = when (val row = rows.getOrNull(position)) {
+        is WidgetRow.Header -> row.label.hashCode().toLong()
+        is WidgetRow.Item -> row.entry.item.id.hashCode().toLong()
+        null -> position.toLong()
+    }
 
     override fun hasStableIds(): Boolean = true
 }
 
-internal fun loadWindow(context: Context): List<WidgetEntry> {
+internal fun loadWindow(context: Context): List<WidgetRow> {
     val json = AlarmStore(context).readWork() ?: return emptyList()
     val board = try {
         parseBoard(json)
     } catch (_: Exception) {
         return emptyList()
     }
-    return MemoPlanner.widgetWindow(board, ZonedDateTime.now(MemoPlanner.ZONE))
+    return MemoPlanner.widgetRows(board, ZonedDateTime.now(MemoPlanner.ZONE))
 }

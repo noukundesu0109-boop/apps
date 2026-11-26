@@ -9,6 +9,17 @@
     android:paddingTop="2dp"
     android:paddingBottom="2dp">
 
+    <TextView
+        android:id="@+id/widget_section"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="6dp"
+        android:paddingBottom="2dp"
+        android:textColor="#FF1F5C45"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
     <ImageView
         android:id="@+id/widget_item_check"
         android:layout_width="28dp"

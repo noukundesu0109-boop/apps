@@ -4,6 +4,13 @@ import android.content.Context
 import org.json.JSONObject
 import java.io.File
 
+internal data class StoredMove(
+    val kind: String,
+    val id: String,
+    val tabId: String,
+    val date: String,
+)
+
 internal data class StoredDone(
     val kind: String,
     val id: String,
@@ -132,6 +139,44 @@ internal class AlarmStore(context: Context) {
     }
 
     fun setPendingDone(items: List<StoredDone>) = writePendingDone(items)
+
+    fun readPendingMoves(): List<StoredMove> {
+        val text = read(file("pending-moves.json")) ?: return emptyList()
+        return try {
+            val array = JSONObject(text).optJSONArray("items") ?: return emptyList()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    val id = item.optString("id")
+                    val kind = item.optString("kind")
+                    val date = item.optString("date")
+                    if (id.isBlank() || kind.isBlank() || date.length != 10) continue
+                    add(StoredMove(kind = kind, id = id, tabId = item.optString("tab"), date = date))
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun addPendingMove(move: StoredMove) {
+        val items = readPendingMoves().filterNot { it.kind == move.kind && it.id == move.id } + move
+        writePendingMoves(items)
+    }
+
+    fun removePendingMove(kind: String, id: String) {
+        writePendingMoves(readPendingMoves().filterNot { it.kind == kind && it.id == id })
+    }
+
+    fun setPendingMoves(items: List<StoredMove>) = writePendingMoves(items)
+
+    private fun writePendingMoves(items: List<StoredMove>) {
+        val array = org.json.JSONArray()
+        for (item in items) {
+            array.put(JSONObject().put("kind", item.kind).put("id", item.id).put("tab", item.tabId).put("date", item.date))
+        }
+        write(file("pending-moves.json"), JSONObject().put("items", array).toString())
+    }
 
     private fun writePendingDone(items: List<StoredDone>) {
         val array = org.json.JSONArray()

@@ -13,8 +13,11 @@ import dev.nossam.task.plan.PlannedMemoAlarm
 import dev.nossam.task.plan.SnoozeHold
 import dev.nossam.task.plan.TaskBoard
 import dev.nossam.task.plan.PendingCompletion
+import dev.nossam.task.plan.PendingMove
 import dev.nossam.task.plan.completeOccurrence
 import dev.nossam.task.plan.mergePendingCompletions
+import dev.nossam.task.plan.mergePendingMoves
+import dev.nossam.task.plan.moveOccurrence
 import dev.nossam.task.plan.parseBoard
 import dev.nossam.task.plan.plannedMemosToJson
 import org.json.JSONObject
@@ -28,6 +31,7 @@ internal object UiBridge {
     var permissionSink: ((String) -> Unit)? = null
     var lastSchedule: String? = null
     var doneSink: ((String) -> Unit)? = null
+    var moveSink: ((String) -> Unit)? = null
 
     fun publishSchedule(json: String) {
         lastSchedule = json
@@ -37,6 +41,11 @@ internal object UiBridge {
 
     fun publishDone(json: String) {
         val sink = doneSink ?: return
+        android.os.Handler(android.os.Looper.getMainLooper()).post { sink(json) }
+    }
+
+    fun publishMove(json: String) {
+        val sink = moveSink ?: return
         android.os.Handler(android.os.Looper.getMainLooper()).post { sink(json) }
     }
 }
@@ -60,9 +69,15 @@ internal object TaskAlarms {
         val app = context.applicationContext
         val schedule = synchronized(lock) {
             val store = AlarmStore(app)
+            val pendingMoves = store.readPendingMoves()
+            val moved = mergePendingMoves(
+                json,
+                pendingMoves.map { PendingMove(it.kind, it.id, it.tabId, it.date) },
+            )
+            store.setPendingMoves(moved.stillPending.map { StoredMove(it.kind, it.id, it.tabId, it.date) })
             val pending = store.readPendingDone()
             val merged = mergePendingCompletions(
-                json,
+                moved.json,
                 pending.map { PendingCompletion(it.kind, it.id, it.tabId, it.day) },
             )
             store.writeWork(merged.json)
@@ -143,6 +158,7 @@ internal object TaskAlarms {
             if (json != null) {
                 store.writeWork(completeOccurrence(json, kind, itemId, tabId, today))
                 store.addPendingDone(StoredDone(kind, itemId, tabId, today))
+                store.removePendingMove(kind, itemId)
                 store.writeSnoozes(store.readSnoozes().filterNot { sameItem(it, kind, itemId, tabId) })
             }
             rebuild(app)
@@ -151,6 +167,24 @@ internal object TaskAlarms {
         UiBridge.publishSchedule(schedule)
         UiBridge.publishDone(
             JSONObject().put("kind", kind).put("id", itemId).put("tabId", tabId).put("day", today).toString(),
+        )
+    }
+
+    fun move(context: Context, kind: String, itemId: String, tabId: String, date: String) {
+        if (itemId.isBlank() || kind.isBlank() || MemoPlanner.parseDate(date) == null) return
+        val app = context.applicationContext
+        val schedule = synchronized(lock) {
+            val store = AlarmStore(app)
+            val json = store.readWork()
+            if (json != null) {
+                store.writeWork(moveOccurrence(json, kind, itemId, tabId, date))
+                store.addPendingMove(StoredMove(kind, itemId, tabId, date))
+            }
+            rebuild(app)
+        }
+        UiBridge.publishSchedule(schedule)
+        UiBridge.publishMove(
+            JSONObject().put("kind", kind).put("id", itemId).put("tabId", tabId).put("date", date).toString(),
         )
     }
 
