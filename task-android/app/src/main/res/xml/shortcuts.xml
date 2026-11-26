@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_mic"
+        android:shortcutId="voice_memo"
+        android:shortcutLongLabel="@string/voice_label"
+        android:shortcutShortLabel="@string/voice_label">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="dev.nossam.task.MainActivity"
+            android:targetPackage="dev.nossam.task">
+            <extra
+                android:name="dev.nossam.task.extra.VOICE"
+                android:value="true" />
+        </intent>
+    </shortcut>
+</shortcuts>

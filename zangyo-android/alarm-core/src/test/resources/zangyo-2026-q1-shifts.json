@@ -1,0 +1,719 @@
+{
+  "source": {
+    "spreadsheet": "残業",
+    "id": "1Ky2akzOVdI0T3fCO9mb2Z_m-LzZQrTo38H1mARhO2rI",
+    "tab": "26",
+    "color_row": "曜日 row for each month",
+    "color_map": {
+      "D9D9D9": "night (グレー=夜勤)",
+      "FFFF00": "day (黄色=昼勤)",
+      "00FF00": "leave (黄緑=年休)",
+      "00FFFF": "off (水色=休み)",
+      "FF9900": "unknown (orange, 1 day)",
+      "FF0000": "unknown (red, 6 days Apr+, not in Q1)"
+    }
+  },
+  "range": "2026-01-01..2026-03-31",
+  "shifts": {
+    "2026-01-01": "off",
+    "2026-01-02": "off",
+    "2026-01-03": "off",
+    "2026-01-04": "off",
+    "2026-01-05": "off",
+    "2026-01-06": "night",
+    "2026-01-07": "night",
+    "2026-01-08": "night",
+    "2026-01-09": "night",
+    "2026-01-10": "off",
+    "2026-01-11": "off",
+    "2026-01-12": "day",
+    "2026-01-13": "day",
+    "2026-01-14": "day",
+    "2026-01-15": "day",
+    "2026-01-16": "day",
+    "2026-01-17": "off",
+    "2026-01-18": "off",
+    "2026-01-19": "night",
+    "2026-01-20": "night",
+    "2026-01-21": "night",
+    "2026-01-22": "night",
+    "2026-01-23": "night",
+    "2026-01-24": "off",
+    "2026-01-25": "off",
+    "2026-01-26": "day",
+    "2026-01-27": "day",
+    "2026-01-28": "day",
+    "2026-01-29": "day",
+    "2026-01-30": "day",
+    "2026-01-31": "off",
+    "2026-02-01": "off",
+    "2026-02-02": "night",
+    "2026-02-03": "night",
+    "2026-02-04": "night",
+    "2026-02-05": "night",
+    "2026-02-06": "night",
+    "2026-02-07": "off",
+    "2026-02-08": "off",
+    "2026-02-09": "day",
+    "2026-02-10": "day",
+    "2026-02-11": "day",
+    "2026-02-12": "day",
+    "2026-02-13": "day",
+    "2026-02-14": "off",
+    "2026-02-15": "off",
+    "2026-02-16": "night",
+    "2026-02-17": "night",
+    "2026-02-18": "night",
+    "2026-02-19": "night",
+    "2026-02-20": "night",
+    "2026-02-21": "off",
+    "2026-02-22": "off",
+    "2026-02-23": "day",
+    "2026-02-24": "day",
+    "2026-02-25": "day",
+    "2026-02-26": "day",
+    "2026-02-27": "day",
+    "2026-02-28": "off",
+    "2026-03-01": "off",
+    "2026-03-02": "night",
+    "2026-03-03": "night",
+    "2026-03-04": "night",
+    "2026-03-05": "night",
+    "2026-03-06": "night",
+    "2026-03-07": "off",
+    "2026-03-08": "off",
+    "2026-03-09": "day",
+    "2026-03-10": "day",
+    "2026-03-11": "day",
+    "2026-03-12": "day",
+    "2026-03-13": "day",
+    "2026-03-14": "off",
+    "2026-03-15": "off",
+    "2026-03-16": "night",
+    "2026-03-17": "night",
+    "2026-03-18": "night",
+    "2026-03-19": "night",
+    "2026-03-20": "night",
+    "2026-03-21": "off",
+    "2026-03-22": "off",
+    "2026-03-23": "day",
+    "2026-03-24": "day",
+    "2026-03-25": "day",
+    "2026-03-26": "day",
+    "2026-03-27": "day",
+    "2026-03-28": "off",
+    "2026-03-29": "off",
+    "2026-03-30": "night",
+    "2026-03-31": "night"
+  },
+  "leave": [
+    "2026-03-12"
+  ],
+  "ambiguous": {
+    "2026-03-11": {
+      "rgb": "FF9900",
+      "provisional_shift": "day",
+      "reason": "orange not in user legend; sits in a day-block next to 年休 2026-03-12; confirm meaning"
+    }
+  },
+  "counts_from_color": {
+    "2026-01": {
+      "off": 12,
+      "night": 9,
+      "day": 10
+    },
+    "2026-02": {
+      "off": 8,
+      "night": 10,
+      "day": 10
+    },
+    "2026-03": {
+      "off": 9,
+      "night": 12,
+      "day": 8,
+      "unknown": 1,
+      "leave": 1
+    }
+  },
+  "counts_as_app_shifts": {
+    "2026-01": {
+      "off": 12,
+      "night": 9,
+      "day": 10
+    },
+    "2026-02": {
+      "off": 8,
+      "night": 10,
+      "day": 10
+    },
+    "2026-03": {
+      "off": 9,
+      "night": 12,
+      "day": 10
+    }
+  },
+  "leave_mapping_note": "App stores 年休 in a separate leave list that overlays a shift. All green (年休) days from Apr 2026 onward have underlying shift=day in Xe/backup. Q1 leave day 2026-03-12 is therefore drafted as shifts[day]=day plus leave list entry. Do NOT use off for 年休 days (that would mis-count 休日).",
+  "sanity_apr_dec_vs_xe": {
+    "known_colors_agree_with_xe": 260,
+    "known_colors_disagree_with_xe": 0,
+    "red_FF0000_days": [
+      [
+        "2026-06-13",
+        "color",
+        "FF0000",
+        "unknown",
+        "off",
+        "off"
+      ],
+      [
+        "2026-07-11",
+        "color",
+        "FF0000",
+        "unknown",
+        "off",
+        "off"
+      ],
+      [
+        "2026-09-12",
+        "color",
+        "FF0000",
+        "unknown",
+        "off",
+        "off"
+      ],
+      [
+        "2026-10-10",
+        "color",
+        "FF0000",
+        "unknown",
+        "off",
+        "day"
+      ],
+      [
+        "2026-10-24",
+        "color",
+        "FF0000",
+        "unknown",
+        "off",
+        "day"
+      ],
+      [
+        "2026-11-21",
+        "color",
+        "FF0000",
+        "unknown",
+        "off",
+        "day"
+      ]
+    ],
+    "red_note": "Red #FF0000 appears on 6 Saturdays Apr+ (not in Q1). Xe treats them as off; backup overrides 3 of them to day. Often have holiday hours in days{}. Not in user-stated legend; treat as special/休出-like, confirm later if needed.",
+    "leave_overlay": [
+      [
+        "2026-04-09",
+        "day",
+        true,
+        true
+      ],
+      [
+        "2026-07-06",
+        "day",
+        true,
+        true
+      ],
+      [
+        "2026-08-07",
+        "day",
+        true,
+        true
+      ],
+      [
+        "2026-09-07",
+        "day",
+        true,
+        true
+      ],
+      [
+        "2026-09-24",
+        "day",
+        true,
+        true
+      ],
+      [
+        "2026-10-07",
+        "day",
+        true,
+        true
+      ],
+      [
+        "2026-10-19",
+        "day",
+        true,
+        true
+      ],
+      [
+        "2026-11-06",
+        "day",
+        true,
+        true
+      ],
+      [
+        "2026-11-19",
+        "day",
+        true,
+        true
+      ]
+    ]
+  },
+  "raw_by_date": {
+    "2026-01-01": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "木"
+    },
+    "2026-01-02": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "金"
+    },
+    "2026-01-03": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "土"
+    },
+    "2026-01-04": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "日"
+    },
+    "2026-01-05": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "月"
+    },
+    "2026-01-06": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "火"
+    },
+    "2026-01-07": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "水"
+    },
+    "2026-01-08": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "木"
+    },
+    "2026-01-09": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "金"
+    },
+    "2026-01-10": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "土"
+    },
+    "2026-01-11": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "日"
+    },
+    "2026-01-12": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "月"
+    },
+    "2026-01-13": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "火"
+    },
+    "2026-01-14": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "水"
+    },
+    "2026-01-15": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "木"
+    },
+    "2026-01-16": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "金"
+    },
+    "2026-01-17": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "土"
+    },
+    "2026-01-18": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "日"
+    },
+    "2026-01-19": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "月"
+    },
+    "2026-01-20": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "火"
+    },
+    "2026-01-21": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "水"
+    },
+    "2026-01-22": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "木"
+    },
+    "2026-01-23": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "金"
+    },
+    "2026-01-24": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "土"
+    },
+    "2026-01-25": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "日"
+    },
+    "2026-01-26": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "月"
+    },
+    "2026-01-27": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "火"
+    },
+    "2026-01-28": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "水"
+    },
+    "2026-01-29": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "木"
+    },
+    "2026-01-30": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "金"
+    },
+    "2026-01-31": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "土"
+    },
+    "2026-02-01": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "日"
+    },
+    "2026-02-02": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "月"
+    },
+    "2026-02-03": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "火"
+    },
+    "2026-02-04": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "水"
+    },
+    "2026-02-05": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "木"
+    },
+    "2026-02-06": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "金"
+    },
+    "2026-02-07": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "土"
+    },
+    "2026-02-08": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "日"
+    },
+    "2026-02-09": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "月"
+    },
+    "2026-02-10": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "火"
+    },
+    "2026-02-11": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "水"
+    },
+    "2026-02-12": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "木"
+    },
+    "2026-02-13": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "金"
+    },
+    "2026-02-14": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "土"
+    },
+    "2026-02-15": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "日"
+    },
+    "2026-02-16": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "月"
+    },
+    "2026-02-17": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "火"
+    },
+    "2026-02-18": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "水"
+    },
+    "2026-02-19": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "木"
+    },
+    "2026-02-20": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "金"
+    },
+    "2026-02-21": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "土"
+    },
+    "2026-02-22": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "日"
+    },
+    "2026-02-23": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "月"
+    },
+    "2026-02-24": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "火"
+    },
+    "2026-02-25": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "水"
+    },
+    "2026-02-26": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "木"
+    },
+    "2026-02-27": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "金"
+    },
+    "2026-02-28": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "土"
+    },
+    "2026-03-01": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "日"
+    },
+    "2026-03-02": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "月"
+    },
+    "2026-03-03": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "火"
+    },
+    "2026-03-04": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "水"
+    },
+    "2026-03-05": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "木"
+    },
+    "2026-03-06": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "金"
+    },
+    "2026-03-07": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "土"
+    },
+    "2026-03-08": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "日"
+    },
+    "2026-03-09": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "月"
+    },
+    "2026-03-10": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "火"
+    },
+    "2026-03-11": {
+      "rgb": "FF9900",
+      "type": "unknown",
+      "weekday": "水"
+    },
+    "2026-03-12": {
+      "rgb": "00FF00",
+      "type": "leave",
+      "weekday": "木"
+    },
+    "2026-03-13": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "金"
+    },
+    "2026-03-14": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "土"
+    },
+    "2026-03-15": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "日"
+    },
+    "2026-03-16": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "月"
+    },
+    "2026-03-17": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "火"
+    },
+    "2026-03-18": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "水"
+    },
+    "2026-03-19": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "木"
+    },
+    "2026-03-20": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "金"
+    },
+    "2026-03-21": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "土"
+    },
+    "2026-03-22": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "日"
+    },
+    "2026-03-23": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "月"
+    },
+    "2026-03-24": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "火"
+    },
+    "2026-03-25": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "水"
+    },
+    "2026-03-26": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "木"
+    },
+    "2026-03-27": {
+      "rgb": "FFFF00",
+      "type": "day",
+      "weekday": "金"
+    },
+    "2026-03-28": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "土"
+    },
+    "2026-03-29": {
+      "rgb": "00FFFF",
+      "type": "off",
+      "weekday": "日"
+    },
+    "2026-03-30": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "月"
+    },
+    "2026-03-31": {
+      "rgb": "D9D9D9",
+      "type": "night",
+      "weekday": "火"
+    }
+  }
+}
