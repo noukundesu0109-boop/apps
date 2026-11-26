@@ -1104,6 +1104,7 @@ fun completeOccurrence(json: String, kind: String, itemId: String, tabId: String
     } catch (_: Exception) {
         return json
     }
+    HistoryLog.record(root, kind, itemId, tabId, today)
     when (kind) {
         MemoPlanner.KIND_MEMO -> markMemoDone(root.optJSONArray("memos"), itemId, today)
         MemoPlanner.KIND_CLEAN -> markChoreDone(root.optJSONArray("cleaning"), itemId, today)

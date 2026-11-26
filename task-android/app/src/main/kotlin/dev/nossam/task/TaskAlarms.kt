@@ -16,6 +16,7 @@ import dev.nossam.task.plan.PendingCompletion
 import dev.nossam.task.plan.PendingMove
 import dev.nossam.task.plan.completeOccurrence
 import dev.nossam.task.plan.mergePendingCompletions
+import dev.nossam.task.plan.HistoryLog
 import dev.nossam.task.plan.mergePendingMoves
 import dev.nossam.task.plan.moveOccurrence
 import dev.nossam.task.plan.parseBoard
@@ -69,9 +70,11 @@ internal object TaskAlarms {
         val app = context.applicationContext
         val schedule = synchronized(lock) {
             val store = AlarmStore(app)
+            val today = ZonedDateTime.now(MemoPlanner.ZONE).toLocalDate().toString()
+            val prepared = HistoryLog.prune(HistoryLog.seed(json), today)
             val pendingMoves = store.readPendingMoves()
             val moved = mergePendingMoves(
-                json,
+                prepared,
                 pendingMoves.map { PendingMove(it.kind, it.id, it.tabId, it.date) },
             )
             store.setPendingMoves(moved.stillPending.map { StoredMove(it.kind, it.id, it.tabId, it.date) })
